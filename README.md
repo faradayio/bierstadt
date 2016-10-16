@@ -5,3 +5,12 @@ Automated print cartography with node.js and d3.js
 
 <small><a href="http://www.stjathenaeum.org/albert-bierstadt-the-domes-of-the-yosemite">The Domes of the Yosemite</a> - Albert Bierstadt, 1867<small>
 
+## Install
+`npm install bierstadt -g`
+
+## Usage
+
+1. Stage your own data sources to `data/`
+2. Style them as SVG in `scripts/style.js`
+3. Run `bierstadt <params>`
+
