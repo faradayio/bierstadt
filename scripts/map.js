@@ -111,14 +111,17 @@ Promise.all([
       if (errors) {
         throw new Error(errors);
       }
-      window.d3 = d3.select(window.document); //get d3 into the dom
-      var svg = window.d3.select('body')
-        .attr('class', 'container') //make a container div to ease the saving process
-        .select("svg")
+      window.d3 = d3.select(window.document.body); //get d3 into the dom
+      console.log(window.d3)
+      var svg = window.d3.select('svg')
+      
+      svg.attr('class', 'container') //make a container div to ease the saving process
         .attr({
           width: width,
           height: height
         });
+        
+        //console.log(window.document.body.innerHTML)
 
       /*function calculateScaleCenter(features) {
         // Get the bounding box of the paths (in pixels!) and calculate a
@@ -147,11 +150,11 @@ Promise.all([
       // 1M sqm, use Albers US, otherwise use Mercator
       var projection;
       //if (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000) {
-        projection = d3.geo.albersUsa()
+        projection = d3.geoAlbersUsa()
           .scale(10000)
           .translate([width / 2, height / 2]);
           
-        var path = d3.geo.path()
+        var path = d3.geoPath()
           .projection(projection);
           
         console.error('using Albers USA projection')
@@ -329,17 +332,16 @@ Promise.all([
       arrangeLabels();
 
       //write out the children of the container div
-      console.error('writing the SVG composition')
-      fs.writeFileSync(workDir + '/map.svg', window.d3.select('.container')
-          .html()) //using sync to keep the code simple
+      console.error('writing the SVG composition')      
+      fs.writeFileSync(workDir + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
 
       //add the xlink namespace back in here
-      /*console.error('repairing the svg')
+      console.error('repairing the svg')
       function puts(error, stdout, stderr) { console.error(stdout); console.error(stderr) };
-      exec("sed -i'' 's/ href/ xlink:href/g' " + workDir + '/map.svg', puts);
-*/
+      // exec("sed -i'' 's/ href/ xlink:href/g' " + workDir + '/map.svg', puts);
+
       //write the pdf via svg
-      var pdfOptions = {
+      /*var pdfOptions = {
         "html" : workDir + "/map.svg",
         "paperSize" : {width: width/72 + 'in', height: (width * (2/3))/72+'in', border: '0px'},
         "deleteOnAction" : true
@@ -348,7 +350,7 @@ Promise.all([
       console.error('writing the PDF')
       pdf.convert(pdfOptions, function(result) {
         result.toFile(workDir + "/map.pdf", function() {});
-      });
+      });*/
     }
   });
 })
