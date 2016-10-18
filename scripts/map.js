@@ -9,8 +9,22 @@ var topojson = require('topojson');
 var pdf = require('phantom-html2pdf');
 var turf = require('turf');
 var csv2geojson = require('csv2geojson');
+var commandLineArgs = require('command-line-args')
+var path = require('path')
 
-var workDir = 'data/usa'
+var optionDefinitions = [
+  { name: 'title', alias: 't', type: String },
+  { name: 'output-type', alias: 'o', type: String, defaultValue: 'svg'}
+  { name: 'csv-source', alias: 'c', type: String },
+  { name: 'geojson-source', alias: 'g', type: String }
+]
+var cmdOptions = commandLineArgs(optionDefinitions)
+
+var projTitle = cmdOptions.title
+
+if (!fs.existsSync('./' + projTitle)){
+  fs.mkdirSync('./' + projTitle);
+}
 
 var width = 9600,
   height = 5000,
@@ -46,29 +60,30 @@ function getCsv(url) {
   })
 }
 
-console.error('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"')
+console.log('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"')
 Promise.all([
   // specify urls for any data layers, using the requestP() function
   // specify paths for any local data layers, using getCsv() if not already geojson
-  getCsv(workDir + '/sites.csv')
+  getCsv(cmdOptions['csv-source'])
 ])
 .then(function(results) {
-  // define layers arriving from the promises or local files
+  // define the default baselayers
   var land = JSON.parse(fs.readFileSync('data/usa/usa_land.topojson', 'utf8'));
   var states = JSON.parse(fs.readFileSync('data/usa/usa_states.topojson', 'utf8'));
   var lakes = JSON.parse(fs.readFileSync('data/usa/usa_lakes.topojson', 'utf8'));
   try {
-    var hillshade = JSON.parse(fs.readFileSync(workDir + '/usa_osm_hillshade.geojson', 'utf8'));  
+    var hillshade = JSON.parse(fs.readFileSync('data/usa/usa_osm_hillshade.geojson', 'utf8'));  
   } catch(e) {
-    console.error('no hillshade available here')
+    console.log('no hillshade available here')
     console.log(e)
   }
-  //var hexes = JSON.parse(fs.readFileSync(workDir + 'data/usa/usa_faraday_hexes.geojson', 'utf8'));
+  
+  // define the user-provided layers
   var sites = results[0];
   
   // pull out just large cities inside the US
-  console.error('getting just the biggest cities')
-  var places = JSON.parse(fs.readFileSync(workDir + '/usa_osm_place_label.geojson', 'utf8'));
+  console.log('getting just the biggest cities')
+  var places = JSON.parse(fs.readFileSync('data/usa/usa_osm_place_label.geojson', 'utf8'));
   var landGeo = turf.buffer(topojson.feature(land, land.objects.usa).features[0],0,'miles');
   var bigPlaces = {"type":"FeatureCollection","features":[]};
   var placeNames = [];
@@ -89,7 +104,7 @@ Promise.all([
   }
   
   // deduplicate the tile-striped hexbins by ID
-  /*console.error('deduplicating tile striping on the hexagons')
+  /*console.log('deduplicating tile striping on the hexagons')
   var hexBins = {"type":"FeatureCollection","features":[]};
   var hexIds = [];
   for (var h = 0; h < hexes.features.length; h++) {
@@ -100,7 +115,7 @@ Promise.all([
   }*/
   
   // start the jsdom party
-  console.error('configuring the document for writing')
+  console.log('configuring the document for writing')
   jsdom.env({
     file: 'templates/base.html',
     features: {
@@ -155,7 +170,7 @@ Promise.all([
         var path = d3.geoPath()
           .projection(projection);
           
-        console.error('using Albers USA projection')
+        console.log('using Albers USA projection')
           
       /*} else {
         projection = d3.geo.mercator()
@@ -171,10 +186,10 @@ Promise.all([
           .center(scaleCenter.center)
           .translate([width/2, height/2]);
         
-        console.error('using Mercator projection')
+        console.log('using Mercator projection')
       }*/
 
-      console.error('rendering the map')
+      console.log('rendering the map')
       // add land
       svg.append("path", ".graticule")
         .datum(topojson.feature(land, land.objects.usa))
@@ -212,7 +227,7 @@ Promise.all([
           .style("fill-opacity", 0.05)
           .style("stroke", "none");
         } catch(e) {
-          console.error('again, no hillshade');
+          console.log('again, no hillshade');
           console.log(e)
         }
         
@@ -331,15 +346,15 @@ Promise.all([
 
       //write out the children of the container div
       console.log('writing the SVG composition')      
-      fs.writeFileSync(workDir + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
+      fs.writeFileSync(projTitle + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
 
       //add the xlink namespace back in here
       console.log('repairing the svg')
-      function puts(error, stdout, stderr) { console.error(stdout); console.error(stderr) };
+      function puts(error, stdout, stderr) { console.log(stdout); console.log(stderr) };
 
       //write the pdf via svg
-      var pdfOptions = {
-        "html" : workDir + "/map.svg",
+      /*var pdfOptions = {
+        "html" : projTitle + "/map.svg",
         "paperSize" : {width: width/72 + 'in', height: (width * (2/3))/72+'in', border: '0px'},
         "deleteOnAction" : true
       };
@@ -350,12 +365,12 @@ Promise.all([
           console.log(err)
           console.log(result)
         } else {
-          result.toFile(workDir + "/map.pdf", function() {});
+          result.toFile(projTitle + "/map.pdf", function() {});
         }
-      });
+      });*/
     }
   });
 })
 .catch(function(err) {
-  console.error(err);
+  console.log(err);
 });
