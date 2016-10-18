@@ -1,5 +1,5 @@
 // build a PDF and SVG of a Faraday customer map
-// usage node map.js path/to/map/assets
+// usage node map.js
 
 var fs = require('fs');
 var d3 = require('d3');
@@ -11,7 +11,7 @@ var turf = require('turf');
 var csv2geojson = require('csv2geojson');
 var exec = require('child_process').execSync;
 
-var workDir = process.argv[2];
+var workDir = 'data/usa'
 
 var width = 9600,
   height = 5000,
@@ -51,25 +51,25 @@ console.error('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!
 Promise.all([
   // specify urls for any data layers, using the requestP() function
   // specify paths for any local data layers, using getCsv() if not already geojson
-  getCsv(workDir + '/customers.csv')
+  getCsv(workDir + '/sites.csv')
 ])
 .then(function(results) {
   // define layers arriving from the promises or local files
-  var land = JSON.parse(fs.readFileSync('national_data/land.topojson', 'utf8'));
-  var states = JSON.parse(fs.readFileSync('national_data/states.topojson', 'utf8'));
-  var lakes = JSON.parse(fs.readFileSync('national_data/lakes.topojson', 'utf8'));
+  var land = JSON.parse(fs.readFileSync('data/usa/usa_land.topojson', 'utf8'));
+  var states = JSON.parse(fs.readFileSync('data/usa/usa_states.topojson', 'utf8'));
+  var lakes = JSON.parse(fs.readFileSync('data/usa/usa_lakes.topojson', 'utf8'));
   try {
-    var hillshade = JSON.parse(fs.readFileSync(workDir + '/tiles/all_osm_hillshade.geojson', 'utf8'));  
+    var hillshade = JSON.parse(fs.readFileSync(workDir + '/usa_osm_hillshade.geojson', 'utf8'));  
   } catch(e) {
     console.error('no hillshade available here')
     console.log(e)
   }
-  var hexes = JSON.parse(fs.readFileSync(workDir + '/tiles/all_faraday_hexes.geojson', 'utf8'));
-  var customers = results[0];
+  //var hexes = JSON.parse(fs.readFileSync(workDir + 'data/usa/usa_faraday_hexes.geojson', 'utf8'));
+  var sites = results[0];
   
   // pull out just large cities inside the US
   console.error('getting just the biggest cities')
-  var places = JSON.parse(fs.readFileSync(workDir + '/tiles/all_osm_place_label.geojson', 'utf8'));
+  var places = JSON.parse(fs.readFileSync(workDir + '/usa_osm_place_label.geojson', 'utf8'));
   var landGeo = turf.buffer(topojson.feature(land, land.objects.usa).features[0],0,'miles');
   var bigPlaces = {"type":"FeatureCollection","features":[]};
   var placeNames = [];
@@ -90,7 +90,7 @@ Promise.all([
   }
   
   // deduplicate the tile-striped hexbins by ID
-  console.error('deduplicating tile striping on the hexagons')
+  /*console.error('deduplicating tile striping on the hexagons')
   var hexBins = {"type":"FeatureCollection","features":[]};
   var hexIds = [];
   for (var h = 0; h < hexes.features.length; h++) {
@@ -98,7 +98,7 @@ Promise.all([
       hexBins.features.push(hexes.features[h]);
       hexIds.push(hexes.features[h].properties.id);
     }
-  }
+  }*/
   
   // start the jsdom party
   console.error('configuring the document for writing')
@@ -120,7 +120,7 @@ Promise.all([
           height: height
         });
 
-      function calculateScaleCenter(features) {
+      /*function calculateScaleCenter(features) {
         // Get the bounding box of the paths (in pixels!) and calculate a
         // scale factor based on the size of the bounding box and the map
         // size.
@@ -142,11 +142,11 @@ Promise.all([
           'center': center
         };
       }
-      
+      */
       // adaptive projection: if customer area covers more than 
       // 1M sqm, use Albers US, otherwise use Mercator
       var projection;
-      //if (turf.area(turf.bboxPolygon(turf.bbox(customers))) > 2580000000000) {
+      //if (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000) {
         projection = d3.geo.albersUsa()
           .scale(10000)
           .translate([width / 2, height / 2]);
@@ -163,7 +163,7 @@ Promise.all([
         var path = d3.geo.path()
           .projection(projection);
           
-        scaleCenter = calculateScaleCenter(customers);
+        scaleCenter = calculateScaleCenter(sites);
         
         projection
           .scale(scaleCenter.scale)
@@ -216,7 +216,7 @@ Promise.all([
         }
         
       // add hexes
-      var hexScale = d3.scale.sqrt()
+      /*var hexScale = d3.scale.sqrt()
         .domain([0, d3.max(hexBins.features, function(d) { return d.properties.count; })])
         .range([0.05, 1]);
         
@@ -230,13 +230,13 @@ Promise.all([
           return hexScale(d.properties.count)
         })
         .style("stroke", "none");
-        
-      // add customers
+        */
+      // add sites
       svg.selectAll(".marker")
-        .data(customers.features)
+        .data(sites.features)
       .enter().append("use")
     		.attr("class", "marker")
-    		.attr("xlink:href", "#hexastar")
+    		.attr("xlink:href", "#drop")
         .attr("transform", function(d) { 
           var coords = projection(d.geometry.coordinates)
           var adjustedCoords = [
@@ -334,10 +334,10 @@ Promise.all([
           .html()) //using sync to keep the code simple
 
       //add the xlink namespace back in here
-      console.error('repairing the svg')
+      /*console.error('repairing the svg')
       function puts(error, stdout, stderr) { console.error(stdout); console.error(stderr) };
       exec("sed -i'' 's/ href/ xlink:href/g' " + workDir + '/map.svg', puts);
-
+*/
       //write the pdf via svg
       var pdfOptions = {
         "html" : workDir + "/map.svg",
