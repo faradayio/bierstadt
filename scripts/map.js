@@ -9,7 +9,6 @@ var topojson = require('topojson');
 var pdf = require('phantom-html2pdf');
 var turf = require('turf');
 var csv2geojson = require('csv2geojson');
-var exec = require('child_process').execSync;
 
 var workDir = 'data/usa'
 
@@ -112,7 +111,6 @@ Promise.all([
         throw new Error(errors);
       }
       window.d3 = d3.select(window.document.body); //get d3 into the dom
-      console.log(window.d3)
       var svg = window.d3.select('svg')
       
       svg.attr('class', 'container') //make a container div to ease the saving process
@@ -328,29 +326,33 @@ Promise.all([
             });
         }
       }
-      console.error('de-colliding labels')
+      console.log('de-colliding labels')
       arrangeLabels();
 
       //write out the children of the container div
-      console.error('writing the SVG composition')      
+      console.log('writing the SVG composition')      
       fs.writeFileSync(workDir + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
 
       //add the xlink namespace back in here
-      console.error('repairing the svg')
+      console.log('repairing the svg')
       function puts(error, stdout, stderr) { console.error(stdout); console.error(stderr) };
-      // exec("sed -i'' 's/ href/ xlink:href/g' " + workDir + '/map.svg', puts);
 
       //write the pdf via svg
-      /*var pdfOptions = {
+      var pdfOptions = {
         "html" : workDir + "/map.svg",
         "paperSize" : {width: width/72 + 'in', height: (width * (2/3))/72+'in', border: '0px'},
         "deleteOnAction" : true
       };
 
-      console.error('writing the PDF')
-      pdf.convert(pdfOptions, function(result) {
-        result.toFile(workDir + "/map.pdf", function() {});
-      });*/
+      console.log('writing the PDF')
+      pdf.convert(pdfOptions, function(err, result) {
+        if (err) {
+          console.log(err)
+          console.log(result)
+        } else {
+          result.toFile(workDir + "/map.pdf", function() {});
+        }
+      });
     }
   });
 })
