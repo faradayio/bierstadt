@@ -14,6 +14,9 @@
     "map",
     "d3"
   ],
+  "bin": {
+    "bierstadt": "scripts/map.js"
+  },
   "author": "bill@faraday.io",
   "license": "MIT",
   "bugs": {
@@ -22,7 +25,7 @@
   "homepage": "https://github.com/faradayio/bierstadt#readme",
   "dependencies": {
     "csv2geojson": "^5.0.2",
-    "d3": "^4.2.7",
+    "d3": "^3.0.0",
     "geojson-merge": "^0.1.0",
     "jsdom": "^9.7.1",
     "pbf": "^3.0.2",
