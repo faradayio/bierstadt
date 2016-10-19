@@ -11,6 +11,9 @@ var turf = require('turf');
 var csv2geojson = require('csv2geojson');
 var commandLineArgs = require('command-line-args')
 var path = require('path')
+var maki = require('maki')
+var csv = require('fast-csv')
+var through2 = require('through2')
 
 var optionDefinitions = [
   { name: 'title', alias: 't', type: String },
@@ -20,14 +23,19 @@ var optionDefinitions = [
   { name: 'maki-icon', alias: 'm', type: String }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
+var icon, iconSvg
 
 var projTitle = cmdOptions.title
 if (cmdOptions['maki-icon']) {
-  var maki = cmdOptions['maki-icon']
+  icon = cmdOptions['maki-icon']  
+  console.log('using maki icon: ' + icon)
+  console.log(maki.dirname)
+  iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-15.svg', 'utf8')
+  console.log(iconSvg)
 }
-
-if (!fs.existsSync('./' + projTitle)){
-  fs.mkdirSync('./' + projTitle);
+    
+if (!fs.existsSync('./projects/' + projTitle)){
+  fs.mkdirSync('./projects/' + projTitle);
 }
 
 var width = 9600,
@@ -74,7 +82,7 @@ console.log('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"'
 Promise.all([
   // specify urls for any data layers, using the requestP() function
   // specify paths for any local data layers, using getCsv() if not already geojson
-  getCsv(cmdOptions['csv-source'])
+  // getCsv(cmdOptions['csv-source'])
 ])
 .then(function(results) {
   // define the default baselayers
@@ -183,12 +191,18 @@ Promise.all([
       }*/
 
       console.log('rendering the map')
+      // add lakes
+      svg.append("path", ".graticule")
+        .datum(topojson.feature(lakes, lakes.objects.us_lakes))
+        .attr("class", "lakes")
+        .attr("d", path)
+        
       // add land
       svg.append("path", ".graticule")
         .datum(topojson.feature(land, land.objects.usa))
         .attr("class", "land")
         .attr("d", path)
-      
+          
       // add states
       svg.insert("path", ".graticule")
         .datum(topojson.mesh(states, states.objects.collection,
@@ -197,13 +211,7 @@ Promise.all([
           }))
         .attr("class", "state-boundary")
         .attr("d", path)
-        
-      // add lakes
-      svg.append("path", ".graticule")
-        .datum(topojson.feature(lakes, lakes.objects.us_lakes))
-        .attr("class", "lakes")
-        .attr("d", path)
-      
+          
       // add hillshade (if it's not the middle of kansas)
       try {
         svg.append("g")
@@ -215,53 +223,12 @@ Promise.all([
           .attr("class", function(d) {
             return d.properties.class + "-" + d.properties.level
           })
-          .style("fill-opacity", 0.05)
+          .style("fill-opacity", 0.1)
           .style("stroke", "none");
         } catch(e) {
           console.log('again, no hillshade');
           console.log(e)
         }
-        
-      // add sites
-      console.log('writing markers')
-      // if a maki icon has been defined, use that:
-      if (maki) {
-        svg.selectAll(".marker")
-          .data(sites.features)
-        .enter().append("use")
-      		.attr("class", "marker")
-      		.attr("xlink:href", "#drop")
-          .attr("transform", function(d) {
-            var coords = projection(d.geometry.coordinates)
-            if (coords) {
-              var adjustedCoords = [
-                coords[0] - (markerSize/2),
-                coords[1] - (markerSize/2)
-              ]; 
-              return "translate(" + adjustedCoords + ")"; 
-            }          
-          })
-      		.attr("width", markerSize)
-      		.attr("height", markerSize);
-      // otherwise use a simple circle:  
-      } else {
-        svg.selectAll(".marker")
-          .data(sites.features)
-          .enter()
-          .append("circle")
-          .attr("class", "marker")
-          .attr("cx", function(d) {
-            if (projection(d.geometry.coordinates)) {
-              return projection(d.geometry.coordinates)[0];
-            } else { return null }
-          })
-          .attr("cy", function(d) {
-            if (projection(d.geometry.coordinates)) {
-              return projection(d.geometry.coordinates)[1];
-            } else { return null }
-          })
-          .attr("r", 4)
-      }
         
       console.log('writing labels')
       // add state labels
@@ -283,6 +250,7 @@ Promise.all([
         .data(bigPlaces.features)
         .enter()
         .append("circle")
+        .attr('class','city')
         .attr("cx", function(d) {
          return projection(d.geometry.coordinates)[0];
         })
@@ -290,7 +258,6 @@ Promise.all([
          return projection(d.geometry.coordinates)[1];
         })
         .attr("r", 3)
-        .style("fill", "#fff");
         
       // add city labels
       svg.selectAll(".place-label")
@@ -345,16 +312,23 @@ Promise.all([
       arrangeLabels();
 
       //write out the children of the container div
-      console.log('writing the SVG composition')      
-      fs.writeFileSync(projTitle + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
+      console.log('writing the SVG basemap composition')      
+      fs.writeFileSync('projects/' + projTitle + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
 
       //add the xlink namespace back in here
-      console.log('repairing the svg')
       function puts(error, stdout, stderr) { console.log(stdout); console.log(stderr) };
 
+      // add markers in a stream
+      /*console.log('streaming markers onto the basemap')
+      csv(cmdOptions['csv-source']).pipe(through2.obj(function (row, _, callback) {
+        let el = `<circle x=${row.x} y=${row.y} />`
+        callback(null, el)
+      })).pipe(fs.createWriteStream('./output.svg', 'utf8'))*/
+      
+      
       //write the pdf via svg
       /*var pdfOptions = {
-        "html" : projTitle + "/map.svg",
+        "html" : 'projects/' + projTitle + "/map.svg",
         "paperSize" : {width: width/72 + 'in', height: (width * (2/3))/72+'in', border: '0px'},
         "deleteOnAction" : true
       };
@@ -365,7 +339,7 @@ Promise.all([
           console.log(err)
           console.log(result)
         } else {
-          result.toFile(projTitle + "/map.pdf", function() {});
+          result.toFile('projects/' + projTitle + "/map.pdf", function() {});
         }
       });*/
     }
