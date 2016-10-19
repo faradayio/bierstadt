@@ -3,60 +3,70 @@
   <head>
     <meta charset="utf-8">
   </head>
-  <body><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-    <style>
-      svg {
-        background-color: #FDF8E6;
-        height: 5000px;
-        width: 9600px;
-      }
-      .land {
-        fill: #F3EEDC;
-      }
-      .lakes {
-        fill: #A3ABB8;
-      }
-      .state-boundary {
-        fill: none;
-        stroke: #777;
-        stroke-width: 1.2px;
-        stroke-linejoin: round;
-        stroke-dasharray: 5,1;
-      }
-      .state-label {
-        fill: #FFFBFB;
-        fill-opacity: .95;
-        font-family: 'Sentinel';
-        font-size: 26px;
-        font-weight: 600;
-        text-anchor: middle;
-        text-shadow: 2px 2px 0px #191919, 3px 3px 0px #191919;
-      }
-      .place-label {
-        fill: #FFFBFB;
-        fill-opacity: .95;
-        font-family: 'Sentinel';
-        font-size: 20px;
-        font-weight: 700;
-        position: absolute;
-        text-shadow: 1.5px 1.5px 0px #191919, -1.5px -1.5px 0px #191919, 1.5px -1.5px 0px #191919, -1.5px 1.5px 0px #191919;
-      }
-      .marker {
-        fill: #695A79;
-        fill-opacity: 0.8;
-      }
-      .shadow-56 {fill: #999999; }
-      .shadow-67 {fill: #888888; }
-      .shadow-78 {fill: #999999; }
-      .highlight-89 {fill: #999999; }
-      .highlight-90 {fill: #000000; }
-      .highlight-94 {fill: #000000; }
-    </style>
-    <defs>
-      <g id="drop" viewBox="0 0 19 19" height="19" width="19">
-        <rect fill="none" x="0" y="0" width="19" height="19"></rect>
-        <path fill="#fbfcd7" transform="translate(2 2)" d="M7.49,15C4.5288,14.827,2.1676,12.4615,2,9.5C2,6.6,6.25,1.66,7.49,0c1.24,1.66,5,6.59,5,9.49S10.17,15,7.49,15z"></path>
-      </g>
-    </defs>
-  </svg></body>
+  <body>
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <style>
+        svg {
+          background-color: #FDF8E6;
+          height: 5000px;
+          width: 9600px;
+        }
+        .land {
+          fill: none;
+          stroke: #777;
+          stroke-width: 0.8px;
+          stroke-linejoin: round;
+        }
+        .lakes {
+          fill: #C1CDCD;
+        }
+        .state-boundary {
+          fill: none;
+          stroke: #777;
+          stroke-width: 1.2px;
+          stroke-linejoin: round;
+          stroke-dasharray: 5,1;
+        }
+        .state-label {
+          fill: #FFFBFB;
+          fill-opacity: .95;
+          font-family: 'Book Antiqua';
+          font-size: 26px;
+          font-weight: 600;
+          text-anchor: middle;
+          text-shadow: 1.5px 1.5px 0px #191919, -1.5px -1.5px 0px #191919, 1.5px -1.5px 0px #191919, -1.5px 1.5px 0px #191919;
+        }
+        .place-label {
+          fill: #191919;
+          fill-opacity: .95;
+          font-family: 'Gill Sans';
+          font-size: 15px;
+          font-weight: 700;
+          position: absolute;
+          text-shadow: 1.5px 1.5px 0px #FFFBFB, -1.5px -1.5px 0px #FFFBFB, 1.5px -1.5px 0px #FFFBFB, -1.5px 1.5px 0px #FFFBFB;
+        }
+        .city {
+          fill: none;
+          stroke: #777;
+          stroke-width: 0.6px;
+        }
+        .marker {
+          fill: #695A79;
+          fill-opacity: 0.8;
+        }
+        .shadow-56 {fill: #999999; }
+        .shadow-67 {fill: #888888; }
+        .shadow-78 {fill: #999999; }
+        .highlight-89 {fill: #999999; }
+        .highlight-90 {fill: #000000; }
+        .highlight-94 {fill: #000000; }
+      </style>
+      <defs>
+        <g id="drop" viewBox="0 0 19 19" height="19" width="19">
+          <rect fill="none" x="0" y="0" width="19" height="19"></rect>
+          <path fill="#fbfcd7" transform="translate(2 2)" d="M7.49,15C4.5288,14.827,2.1676,12.4615,2,9.5C2,6.6,6.25,1.66,7.49,0c1.24,1.66,5,6.59,5,9.49S10.17,15,7.49,15z"></path>
+        </g>
+      </defs>
+    </svg>
+  </body>
 </html>
