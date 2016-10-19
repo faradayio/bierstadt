@@ -16,11 +16,15 @@ var optionDefinitions = [
   { name: 'title', alias: 't', type: String },
   { name: 'output-type', alias: 'o', type: String, defaultValue: 'svg'},
   { name: 'csv-source', alias: 'c', type: String },
-  { name: 'geojson-source', alias: 'g', type: String }
+  { name: 'geojson-source', alias: 'g', type: String },
+  { name: 'maki-icon', alias: 'm', type: String }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
 
 var projTitle = cmdOptions.title
+if (cmdOptions['maki-icon']) {
+  var maki = cmdOptions['maki-icon']
+}
 
 if (!fs.existsSync('./' + projTitle)){
   fs.mkdirSync('./' + projTitle);
@@ -220,40 +224,44 @@ Promise.all([
         
       // add sites
       console.log('writing markers')
-      svg.selectAll(".marker")
-        .data(sites.features)
-        .enter()
-        .append("circle")
-        .attr("cx", function(d) {
-          if (projection(d.geometry.coordinates)) {
-            return projection(d.geometry.coordinates)[0];
-          } else { return null }
-        })
-        .attr("cy", function(d) {
-          if (projection(d.geometry.coordinates)) {
-            return projection(d.geometry.coordinates)[1];
-          } else { return null }
-        })
-        .attr("r", 4)
-      
-      // uncomment to use an svg marker
-      /*svg.selectAll(".marker")
-        .data(sites.features)
-      .enter().append("use")
-    		.attr("class", "marker")
-    		.attr("xlink:href", "#drop")
-        .attr("transform", function(d) {
-          var coords = projection(d.geometry.coordinates)
-          if (coords) {
-            var adjustedCoords = [
-              coords[0] - (markerSize/2),
-              coords[1] - (markerSize/2)
-            ]; 
-            return "translate(" + adjustedCoords + ")"; 
-          }          
-        })
-    		.attr("width", markerSize)
-    		.attr("height", markerSize);*/
+      // if a maki icon has been defined, use that:
+      if (maki) {
+        svg.selectAll(".marker")
+          .data(sites.features)
+        .enter().append("use")
+      		.attr("class", "marker")
+      		.attr("xlink:href", "#drop")
+          .attr("transform", function(d) {
+            var coords = projection(d.geometry.coordinates)
+            if (coords) {
+              var adjustedCoords = [
+                coords[0] - (markerSize/2),
+                coords[1] - (markerSize/2)
+              ]; 
+              return "translate(" + adjustedCoords + ")"; 
+            }          
+          })
+      		.attr("width", markerSize)
+      		.attr("height", markerSize);
+      // otherwise use a simple circle:  
+      } else {
+        svg.selectAll(".marker")
+          .data(sites.features)
+          .enter()
+          .append("circle")
+          .attr("class", "marker")
+          .attr("cx", function(d) {
+            if (projection(d.geometry.coordinates)) {
+              return projection(d.geometry.coordinates)[0];
+            } else { return null }
+          })
+          .attr("cy", function(d) {
+            if (projection(d.geometry.coordinates)) {
+              return projection(d.geometry.coordinates)[1];
+            } else { return null }
+          })
+          .attr("r", 4)
+      }
         
       console.log('writing labels')
       // add state labels
