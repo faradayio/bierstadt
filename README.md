@@ -17,3 +17,4 @@ Automated print cartography with node.js and d3.js
 * `-o, --output-type` One of `svg` or `pdf` - default is `svg` (PDF not actually supported yet - hold tight)
 * `-c, --csv-source` (_OPTIONAL_) Path or URL to `.csv` file of points to be rendered on the output map (e.g. '/home/ubuntu/files/file.csv') - __must be [styled](templates/base.html) and [added](scripts/map.js)__
 * `-g, --geojson-source` (_OPTIONAL_) Path or URL to `.geojson` file of features to be rendered on the output map (e.g. '/home/ubuntu/files/file.geojson') - __must be [styled](templates/base.html) and [added](scripts/map.js)__
+* `-m, --maki-icon` (_OPTIONAL_) - name of desired [maki icon](https://www.mapbox.com/maki-icons/) for rendering points provided in a `csv-source`
