@@ -14,7 +14,7 @@ var path = require('path')
 
 var optionDefinitions = [
   { name: 'title', alias: 't', type: String },
-  { name: 'output-type', alias: 'o', type: String, defaultValue: 'svg'}
+  { name: 'output-type', alias: 'o', type: String, defaultValue: 'svg'},
   { name: 'csv-source', alias: 'c', type: String },
   { name: 'geojson-source', alias: 'g', type: String }
 ]
@@ -54,7 +54,13 @@ function getCsv(url) {
         return;
       }
       else {
-        resolve(data);
+        var outData = { type: 'FeatureCollection', features: [] }
+        for (var f = 0; f < data.features.length; f++) {
+          if (data.features[f].geometry) {
+            outData.features.push(data.features[f])
+          }
+        }
+        resolve(outData);
       }
     });
   })
@@ -103,17 +109,6 @@ Promise.all([
     }
   }
   
-  // deduplicate the tile-striped hexbins by ID
-  /*console.log('deduplicating tile striping on the hexagons')
-  var hexBins = {"type":"FeatureCollection","features":[]};
-  var hexIds = [];
-  for (var h = 0; h < hexes.features.length; h++) {
-    if (hexIds.indexOf(hexes.features[h].properties.id) == -1) {
-      hexBins.features.push(hexes.features[h]);
-      hexIds.push(hexes.features[h].properties.id);
-    }
-  }*/
-  
   // start the jsdom party
   console.log('configuring the document for writing')
   jsdom.env({
@@ -129,13 +124,7 @@ Promise.all([
       var svg = window.d3.select('svg')
       
       svg.attr('class', 'container') //make a container div to ease the saving process
-        .attr({
-          width: width,
-          height: height
-        });
         
-        //console.log(window.document.body.innerHTML)
-
       /*function calculateScaleCenter(features) {
         // Get the bounding box of the paths (in pixels!) and calculate a
         // scale factor based on the size of the bounding box and the map
@@ -195,7 +184,6 @@ Promise.all([
         .datum(topojson.feature(land, land.objects.usa))
         .attr("class", "land")
         .attr("d", path)
-        .style("fill", "#191919");
       
       // add states
       svg.insert("path", ".graticule")
@@ -211,7 +199,6 @@ Promise.all([
         .datum(topojson.feature(lakes, lakes.objects.us_lakes))
         .attr("class", "lakes")
         .attr("d", path)
-        .style("fill", "#000");
       
       // add hillshade (if it's not the middle of kansas)
       try {
@@ -231,39 +218,44 @@ Promise.all([
           console.log(e)
         }
         
-      // add hexes
-      /*var hexScale = d3.scale.sqrt()
-        .domain([0, d3.max(hexBins.features, function(d) { return d.properties.count; })])
-        .range([0.05, 1]);
-        
-      svg.append("g")
-        .attr("class", "hex")
-      .selectAll("path")
-        .data(hexBins.features)
-      .enter().append("path")
-        .attr("d", path)
-        .style("fill-opacity", function(d) {
-          return hexScale(d.properties.count)
-        })
-        .style("stroke", "none");
-        */
       // add sites
+      console.log('writing markers')
       svg.selectAll(".marker")
+        .data(sites.features)
+        .enter()
+        .append("circle")
+        .attr("cx", function(d) {
+          if (projection(d.geometry.coordinates)) {
+            return projection(d.geometry.coordinates)[0];
+          } else { return null }
+        })
+        .attr("cy", function(d) {
+          if (projection(d.geometry.coordinates)) {
+            return projection(d.geometry.coordinates)[1];
+          } else { return null }
+        })
+        .attr("r", 4)
+      
+      // uncomment to use an svg marker
+      /*svg.selectAll(".marker")
         .data(sites.features)
       .enter().append("use")
     		.attr("class", "marker")
     		.attr("xlink:href", "#drop")
-        .attr("transform", function(d) { 
+        .attr("transform", function(d) {
           var coords = projection(d.geometry.coordinates)
-          var adjustedCoords = [
-            coords[0] - (markerSize/2),
-            coords[1] - (markerSize/2)
-          ]; 
-          return "translate(" + adjustedCoords + ")"; 
+          if (coords) {
+            var adjustedCoords = [
+              coords[0] - (markerSize/2),
+              coords[1] - (markerSize/2)
+            ]; 
+            return "translate(" + adjustedCoords + ")"; 
+          }          
         })
     		.attr("width", markerSize)
-    		.attr("height", markerSize);
+    		.attr("height", markerSize);*/
         
+      console.log('writing labels')
       // add state labels
       svg.selectAll(".state-label")
         .data(topojson.feature(states, states.objects.collection).features)
