@@ -1,6 +1,10 @@
 // build a PDF and SVG of a Faraday customer map
 // usage node map.js
 
+//////////////////////////////////////////////////////////////////////////////////////////////
+// define parameters
+//////////////////////////////////////////////////////////////////////////////////////////////
+
 var fs = require('fs');
 var d3 = require('d3');
 var jsdom = require('jsdom');
@@ -12,8 +16,9 @@ var csv2geojson = require('csv2geojson');
 var commandLineArgs = require('command-line-args')
 var path = require('path')
 var maki = require('maki')
-var csv = require('fast-csv')
-var through2 = require('through2')
+//var csv = require('fast-csv')
+//var through2 = require('through2')
+var DOMParser = require('xmldom').DOMParser
 
 var optionDefinitions = [
   { name: 'title', alias: 't', type: String },
@@ -23,16 +28,8 @@ var optionDefinitions = [
   { name: 'maki-icon', alias: 'm', type: String }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
-var icon, iconSvg
 
 var projTitle = cmdOptions.title
-if (cmdOptions['maki-icon']) {
-  icon = cmdOptions['maki-icon']  
-  console.log('using maki icon: ' + icon)
-  console.log(maki.dirname)
-  iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-15.svg', 'utf8')
-  console.log(iconSvg)
-}
     
 if (!fs.existsSync('./projects/' + projTitle)){
   fs.mkdirSync('./projects/' + projTitle);
@@ -42,6 +39,10 @@ var width = 9600,
   height = 5000,
   markerSize = 30,
   scaleCenter;
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// helper functions
+//////////////////////////////////////////////////////////////////////////////////////////////
 
 function requestP(url) {
   return new Promise(function(resolve, reject) {
@@ -78,11 +79,15 @@ function getCsv(url) {
   })
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////
+// data preprocessing
+//////////////////////////////////////////////////////////////////////////////////////////////
+
 console.log('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"')
 Promise.all([
   // specify urls for any data layers, using the requestP() function
   // specify paths for any local data layers, using getCsv() if not already geojson
-  // getCsv(cmdOptions['csv-source'])
+  getCsv(cmdOptions['csv-source'])
 ])
 .then(function(results) {
   // define the default baselayers
@@ -120,8 +125,10 @@ Promise.all([
       placeNames.push(places.features[i].properties.name);
     }
   }
-  
-  // start the jsdom party
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // start the jsdom party, creating an evironment d3 can work in
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
   console.log('configuring the document for writing')
   jsdom.env({
     file: 'templates/base.html',
@@ -137,33 +144,13 @@ Promise.all([
       
       svg.attr('class', 'container') //make a container div to ease the saving process
         
-      /*function calculateScaleCenter(features) {
-        // Get the bounding box of the paths (in pixels!) and calculate a
-        // scale factor based on the size of the bounding box and the map
-        // size.
-        var bbox_path = path.bounds(features),
-            scale = 0.95 / Math.max(
-              (bbox_path[1][0] - bbox_path[0][0]) / width,
-              (bbox_path[1][1] - bbox_path[0][1]) / height
-            );
-
-        // Get the bounding box of the features (in map units!) and use it
-        // to calculate the center of the features.
-        var bbox_feature = d3.geo.bounds(features),
-            center = [
-              (bbox_feature[1][0] + bbox_feature[0][0]) / 2,
-              (bbox_feature[1][1] + bbox_feature[0][1]) / 2];
-
-        return {
-          'scale': scale,
-          'center': center
-        };
-      }
-      */
-      // adaptive projection: if customer area covers more than 
+      //////////////////////////////////////////////////////////////////////////////////////////////
+      // adaptive projection: if POI area covers more than 
       // 1M sqm, use Albers US, otherwise use Mercator
+      //////////////////////////////////////////////////////////////////////////////////////////////
+
       var projection;
-      //if (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000) {
+      if (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000) {
         projection = d3.geoAlbersUsa()
           .scale(10000)
           .translate([width / 2, height / 2]);
@@ -173,7 +160,30 @@ Promise.all([
           
         console.log('using Albers USA projection')
           
-      /*} else {
+      } else {
+        function calculateScaleCenter(features) {
+          // Get the bounding box of the paths (in pixels!) and calculate a
+          // scale factor based on the size of the bounding box and the map
+          // size.
+          var bbox_path = path.bounds(features),
+              scale = 0.95 / Math.max(
+                (bbox_path[1][0] - bbox_path[0][0]) / width,
+                (bbox_path[1][1] - bbox_path[0][1]) / height
+              );
+
+          // Get the bounding box of the features (in map units!) and use it
+          // to calculate the center of the features.
+          var bbox_feature = d3.geo.bounds(features),
+              center = [
+                (bbox_feature[1][0] + bbox_feature[0][0]) / 2,
+                (bbox_feature[1][1] + bbox_feature[0][1]) / 2];
+
+          return {
+            'scale': scale,
+            'center': center
+          };
+        }
+        
         projection = d3.geo.mercator()
           .scale(1)
           
@@ -188,7 +198,11 @@ Promise.all([
           .translate([width/2, height/2]);
         
         console.log('using Mercator projection')
-      }*/
+      }
+      
+      //////////////////////////////////////////////////////////////////////////////////////////////
+      // add and style the default baselayers
+      //////////////////////////////////////////////////////////////////////////////////////////////
 
       console.log('rendering the map')
       // add lakes
@@ -228,6 +242,69 @@ Promise.all([
         } catch(e) {
           console.log('again, no hillshade');
           console.log(e)
+        }
+        
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        // add and style POIs
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        
+        console.log('drawing markers')
+        // if a maki icon has been defined, use that:
+        if (cmdOptions['maki-icon']) {
+          icon = cmdOptions['maki-icon']  
+          console.log('using maki icon: ' + icon)
+          iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-15.svg', 'utf8')
+          
+          var parser = new DOMParser();
+          var doc = parser.parseFromString(iconSvg, "application/xml");
+          var iconD = doc.documentElement.getElementsByTagName('path')[0].attributes['3'].nodeValue
+          
+          var markerDef = svg.select('defs')
+            .append("g")
+            .attr("id",icon)
+            .attr("viewbox", "0 0 " + markerSize + " " + markerSize)
+            .attr("height", markerSize)
+            .attr("width", markerSize)
+            .attr("style", "enable-background:new 0 0 " + markerSize + " " + markerSize + ";")
+            
+          markerDef.append('path')
+            .attr("d", iconD)
+          
+          svg.selectAll(".marker")
+            .data(sites.features)
+          .enter().append("use")
+        		.attr("class", "marker")
+        		.attr("xlink:href", "#" + icon)
+            .attr("transform", function(d) {
+              var coords = projection(d.geometry.coordinates)
+              if (coords) {
+                var adjustedCoords = [
+                  coords[0] - (markerSize/2),
+                  coords[1] - (markerSize/2)
+                ]; 
+                return "translate(" + adjustedCoords + ")"; 
+              }          
+            })
+        		.attr("width", markerSize)
+        		.attr("height", markerSize);
+        // otherwise use a simple circle:  
+        } else {
+          svg.selectAll(".marker")
+            .data(sites.features)
+            .enter()
+            .append("circle")
+            .attr("class", "marker")
+            .attr("cx", function(d) {
+              if (projection(d.geometry.coordinates)) {
+                return projection(d.geometry.coordinates)[0];
+              } else { return null }
+            })
+            .attr("cy", function(d) {
+              if (projection(d.geometry.coordinates)) {
+                return projection(d.geometry.coordinates)[1];
+              } else { return null }
+            })
+            .attr("r", 3)
         }
         
       console.log('writing labels')
