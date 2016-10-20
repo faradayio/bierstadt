@@ -1,6 +1,6 @@
 {
   "name": "bierstadt",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "Automated print cartography with node.js and d3.js",
   "main": "index.js",
   "scripts": {

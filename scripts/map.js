@@ -16,8 +16,6 @@ var csv2geojson = require('csv2geojson');
 var commandLineArgs = require('command-line-args')
 var path = require('path')
 var maki = require('maki')
-//var csv = require('fast-csv')
-//var through2 = require('through2')
 var DOMParser = require('xmldom').DOMParser
 
 var optionDefinitions = [
@@ -37,7 +35,7 @@ if (!fs.existsSync('./projects/' + projTitle)){
 
 var width = 9600,
   height = 5000,
-  markerSize = 30,
+  markerSize = 50,
   scaleCenter;
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -253,11 +251,10 @@ Promise.all([
         if (cmdOptions['maki-icon']) {
           icon = cmdOptions['maki-icon']  
           console.log('using maki icon: ' + icon)
-          iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-15.svg', 'utf8')
+          iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-11.svg', 'utf8')
           
           var parser = new DOMParser();
           var doc = parser.parseFromString(iconSvg, "application/xml");
-          var iconD = doc.documentElement.getElementsByTagName('path')[0].attributes['3'].nodeValue
           
           var markerDef = svg.select('defs')
             .append("g")
@@ -267,8 +264,13 @@ Promise.all([
             .attr("width", markerSize)
             .attr("style", "enable-background:new 0 0 " + markerSize + " " + markerSize + ";")
             
-          markerDef.append('path')
-            .attr("d", iconD)
+          var hayStack = doc.documentElement.getElementsByTagName('path')[0].attributes
+          for (var h = 0; h < hayStack.length; h++) {
+            if (hayStack[h].nodeValue) {
+              markerDef.append('path')
+                .attr("d", hayStack[h].nodeValue)
+            }
+          }
           
           svg.selectAll(".marker")
             .data(sites.features)
@@ -279,8 +281,8 @@ Promise.all([
               var coords = projection(d.geometry.coordinates)
               if (coords) {
                 var adjustedCoords = [
-                  coords[0] - (markerSize/2),
-                  coords[1] - (markerSize/2)
+                  coords[0] - (markerSize/4),
+                  coords[1] - (markerSize/4)
                 ]; 
                 return "translate(" + adjustedCoords + ")"; 
               }          
