@@ -23,11 +23,16 @@ var optionDefinitions = [
   { name: 'output-type', alias: 'o', type: String, defaultValue: 'svg'},
   { name: 'csv-source', alias: 'c', type: String },
   { name: 'geojson-source', alias: 'g', type: String },
-  { name: 'maki-icon', alias: 'm', type: String }
+  { name: 'maki-icon', alias: 'm', type: String },
+  { name: 'local-source', alias: 'l', type: String }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
 
 var projTitle = cmdOptions.title
+
+if (!!cmdOptions['csv-source'] + !!cmdOptions['geojson-source'] + !!cmdOptions['local-source'] >= 2) {
+  console.error('HOLD UP - try specifying a single source')
+}
     
 if (!fs.existsSync('./projects/' + projTitle)){
   fs.mkdirSync('./projects/' + projTitle);
@@ -77,6 +82,20 @@ function getCsv(url) {
   })
 }
 
+function getLocal(url) {
+  return new Promise(function(resolve, reject) {
+    var rawData = fs.readFileSync(url, 'utf8');
+      var outData = { type: 'FeatureCollection', features: [] }
+      for (var f = 0; f < rawData.features.length; f++) {
+        if (data.features[f].geometry) {
+          outData.features.push(data.features[f])
+        }
+      }
+      resolve(outData);
+    });
+  })
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////
 // data preprocessing
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -85,6 +104,7 @@ console.log('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"'
 Promise.all([
   // specify urls for any data layers, using the requestP() function
   // specify paths for any local data layers, using getCsv() if not already geojson
+  getLocal(cmdOptions['local-source']),
   getCsv(cmdOptions['csv-source'])
 ])
 .then(function(results) {
