@@ -5,14 +5,14 @@
 // define parameters
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-var fs = require('fs');
-var d3 = require('d3');
-var jsdom = require('jsdom');
-var request = require('request');
-var topojson = require('topojson');
-var pdf = require('phantom-html2pdf');
-var turf = require('turf');
-var csv2geojson = require('csv2geojson');
+var fs = require('fs')
+var d3 = require('d3')
+var jsdom = require('jsdom')
+var request = require('request')
+var topojson = require('topojson')
+var pdf = require('phantom-html2pdf')
+var turf = require('turf')
+var csv2geojson = require('csv2geojson')
 var commandLineArgs = require('command-line-args')
 var path = require('path')
 var maki = require('maki')
@@ -35,7 +35,7 @@ if (!fs.existsSync('./projects/' + projTitle)){
 
 var width = 9600,
   height = 5000,
-  markerSize = 50,
+  markerSize = 11, // other acceptable option here is 15. long story.
   scaleCenter;
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -251,7 +251,7 @@ Promise.all([
         if (cmdOptions['maki-icon']) {
           icon = cmdOptions['maki-icon']  
           console.log('using maki icon: ' + icon)
-          iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-11.svg', 'utf8')
+          iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-' + markerSize + '.svg', 'utf8')
           
           var parser = new DOMParser();
           var doc = parser.parseFromString(iconSvg, "application/xml");
@@ -277,15 +277,25 @@ Promise.all([
           .enter().append("use")
         		.attr("class", "marker")
         		.attr("xlink:href", "#" + icon)
-            .attr("transform", function(d) {
+            /*.attr("transform", function(d) {
               var coords = projection(d.geometry.coordinates)
               if (coords) {
                 var adjustedCoords = [
-                  coords[0] - (markerSize/4),
-                  coords[1] - (markerSize/4)
+                  coords[0] - (markerSize),
+                  coords[1] - (markerSize)
                 ]; 
                 return "translate(" + adjustedCoords + ")"; 
               }          
+            })*/
+            .attr("x", function(d) {
+              if (projection(d.geometry.coordinates)) {
+                return projection(d.geometry.coordinates)[0];
+              } else { return null }
+            })
+            .attr("y", function(d) {
+              if (projection(d.geometry.coordinates)) {
+                return projection(d.geometry.coordinates)[1];
+              } else { return null }
             })
         		.attr("width", markerSize)
         		.attr("height", markerSize);
@@ -422,8 +432,8 @@ Promise.all([
         }
       });*/
     }
-  });
+  })
 })
 .catch(function(err) {
   console.log(err);
-});
+})
