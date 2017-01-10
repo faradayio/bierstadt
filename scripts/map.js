@@ -10,6 +10,7 @@ var d3 = require('d3')
 var jsdom = require('jsdom')
 var request = require('request')
 var topojson = require('topojson')
+var colorSchemes = require('d3-scale-chromatic')
 var pdf = require('phantom-html2pdf')
 var turf = require('turf')
 var csv2geojson = require('csv2geojson')
@@ -23,28 +24,33 @@ var optionDefinitions = [
   { name: 'output-type', alias: 'o', type: String, defaultValue: 'svg'},
   { name: 'csv-source', alias: 'c', type: String },
   { name: 'geojson-source', alias: 'g', type: String },
+  { name: 'topojson-source', alias: 'p', type: String },
   { name: 'maki-icon', alias: 'm', type: String },
-  { name: 'local-source', alias: 'l', type: String }
+  { name: 'theme-geometry', alias: 'h', type: String }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
 
 var projTitle = cmdOptions.title
 
-if (!!cmdOptions['csv-source'] + !!cmdOptions['geojson-source'] + !!cmdOptions['local-source'] >= 2) {
+if (!!cmdOptions['csv-source'] + !!cmdOptions['geojson-source'] + !!cmdOptions['topojson-source'] >= 2) {
   console.error('HOLD UP - try specifying a single source')
+}
+
+if (cmdOptions['theme-geometry'] && !cmdOptions['csv-source'] && !cmdOptions['geojson-source'] && !cmdOptions['topojson-source']) {
+  console.error('WHOA THERE - you need to specify a source for your ' + cmdOptions['theme-geometry'] + ' layer')
 }
     
 if (!fs.existsSync('./projects/' + projTitle)){
   fs.mkdirSync('./projects/' + projTitle);
 }
 
-var width = 9600,
-  height = 5000,
+var width = 3300,
+  height = 2350,
   markerSize = 11, // other acceptable option here is 15. long story.
   scaleCenter;
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-// helper functions
+// helper functions for building geojson from whatever
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 function requestP(url) {
@@ -61,52 +67,72 @@ function requestP(url) {
   });
 }
 
-function getCsv(url) {
-  return new Promise(function(resolve, reject) {
-    var rawData = fs.readFileSync(url, 'utf8');
-    var geoJson = csv2geojson.csv2geojson(rawData, function(err, data) {
-      if (err) {
-        reject(error);
-        return;
-      }
-      else {
-        var outData = { type: 'FeatureCollection', features: [] }
-        for (var f = 0; f < data.features.length; f++) {
-          if (data.features[f].geometry) {
-            outData.features.push(data.features[f])
-          }
-        }
-        resolve(outData);
-      }
-    });
-  })
-}
+//////////////////////////////////////////////////////////////////////////////////////////////
+// data preprocessing
+//////////////////////////////////////////////////////////////////////////////////////////////
+// specify urls for any remote data layers, using the requestP() function
+// specify paths for any local data layers, using getCsv() if not already geojson,
+// or getGeojson if already geojson
 
-function getLocal(url) {
-  return new Promise(function(resolve, reject) {
-    var rawData = fs.readFileSync(url, 'utf8');
+console.error('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"')
+var sourceGrabs;
+var promiseData;
+if (cmdOptions['geojson-source']) {
+  promiseData = cmdOptions['geojson-source']
+  sourceGrabs = function(url) {
+    return new Promise(function(resolve, reject) {
+      var rawData = JSON.parse(fs.readFileSync(url, 'utf8'));
       var outData = { type: 'FeatureCollection', features: [] }
       for (var f = 0; f < rawData.features.length; f++) {
-        if (data.features[f].geometry) {
-          outData.features.push(data.features[f])
+        if (rawData.features[f].geometry) {
+          outData.features.push(rawData.features[f])
         }
       }
       resolve(outData);
     });
-  })
+  }
+}
+if (cmdOptions['topojson-source']) {
+  promiseData = cmdOptions['topojson-source']
+  sourceGrabs = function(url) {
+    return new Promise(function(resolve, reject) {
+      var rawData = JSON.parse(fs.readFileSync(url, 'utf8'));
+      var geoData = topojson.feature(rawData, rawData.objects.counties)
+      var outData = { type: 'FeatureCollection', features: [] }
+      for (var f = 0; f < geoData.features.length; f++) {
+        if (geoData.features[f].geometry) {
+          outData.features.push(geoData.features[f])
+        }
+      }
+      resolve(outData);
+    });
+  }
+}
+if (cmdOptions['csv-source']) {
+  promiseData = cmdOptions['csv-source']
+  sourceGrabs = function(url) {
+    return new Promise(function(resolve, reject) {
+      var rawData = fs.readFileSync(url, 'utf8');
+      var geoJson = csv2geojson.csv2geojson(rawData, function(err, data) {
+        if (err) {
+          reject(error);
+          return;
+        }
+        else {
+          var outData = { type: 'FeatureCollection', features: [] }
+          for (var f = 0; f < data.features.length; f++) {
+            if (data.features[f].geometry) {
+              outData.features.push(data.features[f])
+            }
+          }
+          resolve(outData);
+        }
+      });
+    })
+  }
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////
-// data preprocessing
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-console.log('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"')
-Promise.all([
-  // specify urls for any data layers, using the requestP() function
-  // specify paths for any local data layers, using getCsv() if not already geojson
-  getLocal(cmdOptions['local-source']),
-  getCsv(cmdOptions['csv-source'])
-])
+Promise.all([sourceGrabs(promiseData)])
 .then(function(results) {
   // define the default baselayers
   var land = JSON.parse(fs.readFileSync('data/usa/usa_land.topojson', 'utf8'));
@@ -115,15 +141,15 @@ Promise.all([
   try {
     var hillshade = JSON.parse(fs.readFileSync('data/usa/usa_osm_hillshade.geojson', 'utf8'));  
   } catch(e) {
-    console.log('no hillshade available here')
-    console.log(e)
+    console.error('no hillshade available here')
+    console.error(e)
   }
   
   // define the user-provided layers
   var sites = results[0];
   
   // pull out just large cities inside the US
-  console.log('getting just the biggest cities')
+  console.error('getting just the biggest cities')
   var places = JSON.parse(fs.readFileSync('data/usa/usa_osm_place_label.geojson', 'utf8'));
   var landGeo = turf.buffer(topojson.feature(land, land.objects.usa).features[0],0,'miles');
   var bigPlaces = {"type":"FeatureCollection","features":[]};
@@ -147,7 +173,7 @@ Promise.all([
   // start the jsdom party, creating an evironment d3 can work in
   //////////////////////////////////////////////////////////////////////////////////////////////
 
-  console.log('configuring the document for writing')
+  console.error('configuring the document for writing')
   jsdom.env({
     file: 'templates/base.html',
     features: {
@@ -168,15 +194,15 @@ Promise.all([
       //////////////////////////////////////////////////////////////////////////////////////////////
 
       var projection;
-      if (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000) {
+      if (!sites || (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000)) {
         projection = d3.geoAlbersUsa()
-          .scale(10000)
+          .scale(width * 1.25)
           .translate([width / 2, height / 2]);
           
         var path = d3.geoPath()
           .projection(projection);
           
-        console.log('using Albers USA projection')
+        console.error('using Albers USA projection')
           
       } else {
         function calculateScaleCenter(features) {
@@ -215,14 +241,14 @@ Promise.all([
           .center(scaleCenter.center)
           .translate([width/2, height/2]);
         
-        console.log('using Mercator projection')
+        console.error('using Mercator projection')
       }
       
       //////////////////////////////////////////////////////////////////////////////////////////////
       // add and style the default baselayers
       //////////////////////////////////////////////////////////////////////////////////////////////
 
-      console.log('rendering the map')
+      console.error('rendering the map')
       // add lakes
       svg.append("path", ".graticule")
         .datum(topojson.feature(lakes, lakes.objects.us_lakes))
@@ -258,19 +284,90 @@ Promise.all([
           .style("fill-opacity", 0.1)
           .style("stroke", "none");
         } catch(e) {
-          console.log('again, no hillshade');
-          console.log(e)
+          console.error('again, no hillshade');
+          console.error(e)
         }
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        // add and style Polygons
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        // suggestion: use geojson-join to prep data before passing it in, e.g.:
+        // geojson-join --format=csv hockey.csv --againstField=county_id --geojsonField=GEOID < usa_counties.geojson > hockey_counties.geojson
+        
+        var colors = {
+          "jan": { "low": "#C1E0E0", "high": "#DC8E30" },
+          "feb": { "low": "#E8B8CA", "high": "#C21F38" },
+          "mar": { "low": "#CDDE90", "high": "#5BA08A" },
+          "apr": { "low": "#7EC3CA", "high": "#9F71AD" },
+          "may": { "low": "#D483B2", "high": "#C1E0E0" },
+          "jun": { "low": "#D45964", "high": "#5A9FAC" },
+          "jul": { "low": "#C21F38", "high": "#25417A" },
+          "aug": { "low": "#A3BC48", "high": "#F1C93A" },
+          "sep": { "low": "#B8AF29", "high": "#602E88" },
+          "oct": { "low": "#6D4609", "high": "#DC8E30" },
+          "nov": { "low": "#E1D1A5", "high": "#5A9FAC" },
+          "dec": { "low": "#CAE0F5", "high": "#40725B" },
+        }
+        
+        console.error('drawing thematic layer')
+        if (cmdOptions['theme-geometry'] === 'polygon') {
+          console.error('drawing ' + sites.features.length + ' polygons')
+          
+          var mappable = d3.map();
+
+          var x = d3.scaleLinear()
+              .domain([1, 10])
+              .rangeRound([600, 1260]);
+
+          var color = d3.scaleThreshold()
+              .domain(d3.range(2, 10))
+              .range(colorSchemes.schemeBlues[9]);
+
+          var g = svg.append("g")
+              .attr("class", "key")
+              .attr("transform", "translate(1200,2000)");
+
+          g.selectAll("rect")
+            .data(color.range().map(function(d) {
+                d = color.invertExtent(d);
+                if (d[0] == null) d[0] = x.domain()[0];
+                if (d[1] == null) d[1] = x.domain()[1];
+                return d;
+              }))
+            .enter().append("rect")
+              .attr("height", 40)
+              .attr("x", function(d) { return x(d[0]); })
+              .attr("width", function(d) { return x(d[1]) - x(d[0]); })
+              .attr("fill", function(d) { return color(d[0]); });
+
+          g.call(d3.axisTop(x)
+              .tickSize(10)
+              .tickFormat(function(x, i) { return i ? x : x + "%"; })
+              .tickValues(color.domain()))
+            .select(".domain")
+              .remove();
+
+            svg.append("g")
+                .attr("class", "counties")
+              .selectAll("path")
+              .data(sites.features)
+              .enter().append("path")
+                .attr("fill", function(d) { 
+                  console.log(d.properties.rate);
+                  return color(d.rate); 
+                })
+                .attr("d", path)
+        }
+        
         
         //////////////////////////////////////////////////////////////////////////////////////////////
         // add and style POIs
         //////////////////////////////////////////////////////////////////////////////////////////////
         
-        console.log('drawing markers')
+        console.error('drawing markers')
         // if a maki icon has been defined, use that:
-        if (cmdOptions['maki-icon']) {
+        if (cmdOptions['theme-geometry'] === 'point' && cmdOptions['maki-icon']) {
           icon = cmdOptions['maki-icon']  
-          console.log('using maki icon: ' + icon)
+          console.error('using maki icon: ' + icon)
           iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-' + markerSize + '.svg', 'utf8')
           
           var parser = new DOMParser();
@@ -297,6 +394,7 @@ Promise.all([
           .enter().append("use")
         		.attr("class", "marker")
         		.attr("xlink:href", "#" + icon)
+            //TODO figure out the ideal tranform here: 
             /*.attr("transform", function(d) {
               var coords = projection(d.geometry.coordinates)
               if (coords) {
@@ -320,7 +418,7 @@ Promise.all([
         		.attr("width", markerSize)
         		.attr("height", markerSize);
         // otherwise use a simple circle:  
-        } else {
+      } else if (cmdOptions['theme-geometry'] === 'point' && !cmdOptions['maki-icon']) {
           svg.selectAll(".marker")
             .data(sites.features)
             .enter()
@@ -337,9 +435,11 @@ Promise.all([
               } else { return null }
             })
             .attr("r", 3)
+        } else {
+          console.error('no markers to draw - moving on')
         }
         
-      console.log('writing labels')
+      console.error('writing labels')
       // add state labels
       svg.selectAll(".state-label")
         .data(topojson.feature(states, states.objects.collection).features)
@@ -417,18 +517,18 @@ Promise.all([
             });
         }
       }
-      console.log('de-colliding labels')
+      console.error('de-colliding labels')
       arrangeLabels();
 
       //write out the children of the container div
-      console.log('writing the SVG basemap composition')      
+      console.error('writing the SVG basemap composition')      
       fs.writeFileSync('projects/' + projTitle + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
 
       //add the xlink namespace back in here
-      function puts(error, stdout, stderr) { console.log(stdout); console.log(stderr) };
+      function puts(error, stdout, stderr) { console.error(stdout); console.error(stderr) };
 
       // add markers in a stream
-      /*console.log('streaming markers onto the basemap')
+      /*console.error('streaming markers onto the basemap')
       csv(cmdOptions['csv-source']).pipe(through2.obj(function (row, _, callback) {
         let el = `<circle x=${row.x} y=${row.y} />`
         callback(null, el)
@@ -442,11 +542,11 @@ Promise.all([
         "deleteOnAction" : true
       };
 
-      console.log('writing the PDF')
+      console.error('writing the PDF')
       pdf.convert(pdfOptions, function(err, result) {
         if (err) {
-          console.log(err)
-          console.log(result)
+          console.error(err)
+          console.error(result)
         } else {
           result.toFile('projects/' + projTitle + "/map.pdf", function() {});
         }
@@ -455,5 +555,5 @@ Promise.all([
   })
 })
 .catch(function(err) {
-  console.log(err);
+  console.error(err);
 })
