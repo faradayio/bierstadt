@@ -10,7 +10,6 @@ var d3 = require('d3')
 var jsdom = require('jsdom')
 var request = require('request')
 var topojson = require('topojson')
-var colorSchemes = require('d3-scale-chromatic')
 var pdf = require('phantom-html2pdf')
 var turf = require('turf')
 var csv2geojson = require('csv2geojson')
@@ -26,11 +25,13 @@ var optionDefinitions = [
   { name: 'geojson-source', alias: 'g', type: String },
   { name: 'topojson-source', alias: 'p', type: String },
   { name: 'maki-icon', alias: 'm', type: String },
+  { name: 'color-scheme', alias: 's', type: String, defaultValue: 'jan'},
   { name: 'theme-geometry', alias: 'h', type: String }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
 
 var projTitle = cmdOptions.title
+var colorMonth = cmdOptions['color-scheme']
 
 if (!!cmdOptions['csv-source'] + !!cmdOptions['geojson-source'] + !!cmdOptions['topojson-source'] >= 2) {
   console.error('HOLD UP - try specifying a single source')
@@ -47,6 +48,7 @@ if (!fs.existsSync('./projects/' + projTitle)){
 var width = 3300,
   height = 2350,
   markerSize = 11, // other acceptable option here is 15. long story.
+  legendCells = 9,
   scaleCenter;
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -157,11 +159,12 @@ Promise.all([sourceGrabs(promiseData)])
   for (var i = 0; i < places.features.length; i++) {
     // a passel of conditions:
     if (
-      places.features[i].properties.scalerank < 7 && 
+      places.features[i].properties.scalerank < 6 && 
       places.features[i].properties.type == 'city' &&
       places.features[i].properties.name !== 'Syracuse' &&
       places.features[i].properties.name !== 'Columbia' &&
       places.features[i].properties.name !== 'Wenatchee' &&
+      places.features[i].properties.name !== 'San Bernardino' &&
       turf.inside(places.features[i], landGeo) && 
       placeNames.indexOf(places.features[i].properties.name) == -1
     ) {
@@ -243,50 +246,8 @@ Promise.all([sourceGrabs(promiseData)])
         
         console.error('using Mercator projection')
       }
+          
       
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      // add and style the default baselayers
-      //////////////////////////////////////////////////////////////////////////////////////////////
-
-      console.error('rendering the map')
-      // add lakes
-      svg.append("path", ".graticule")
-        .datum(topojson.feature(lakes, lakes.objects.us_lakes))
-        .attr("class", "lakes")
-        .attr("d", path)
-        
-      // add land
-      svg.append("path", ".graticule")
-        .datum(topojson.feature(land, land.objects.usa))
-        .attr("class", "land")
-        .attr("d", path)
-          
-      // add states
-      svg.insert("path", ".graticule")
-        .datum(topojson.mesh(states, states.objects.collection,
-          function(a, b) {
-            return a !== b;
-          }))
-        .attr("class", "state-boundary")
-        .attr("d", path)
-          
-      // add hillshade (if it's not the middle of kansas)
-      try {
-        svg.append("g")
-          .attr("class", "hillshade")
-        .selectAll("path")
-          .data(hillshade.features)
-        .enter().append("path")
-          .attr("d", path)
-          .attr("class", function(d) {
-            return d.properties.class + "-" + d.properties.level
-          })
-          .style("fill-opacity", 0.1)
-          .style("stroke", "none");
-        } catch(e) {
-          console.error('again, no hillshade');
-          console.error(e)
-        }
         //////////////////////////////////////////////////////////////////////////////////////////////
         // add and style Polygons
         //////////////////////////////////////////////////////////////////////////////////////////////
@@ -295,7 +256,7 @@ Promise.all([sourceGrabs(promiseData)])
         
         var colors = {
           "jan": { "low": "#C1E0E0", "high": "#DC8E30" },
-          "feb": { "low": "#E8B8CA", "high": "#C21F38" },
+          "feb": { "low": "#e5f5f9", "high": "#2ca25f" },
           "mar": { "low": "#CDDE90", "high": "#5BA08A" },
           "apr": { "low": "#7EC3CA", "high": "#9F71AD" },
           "may": { "low": "#D483B2", "high": "#C1E0E0" },
@@ -307,6 +268,7 @@ Promise.all([sourceGrabs(promiseData)])
           "nov": { "low": "#E1D1A5", "high": "#5A9FAC" },
           "dec": { "low": "#CAE0F5", "high": "#40725B" },
         }
+        // or use these: https://github.com/d3/d3-scale-chromatic
         
         console.error('drawing thematic layer')
         if (cmdOptions['theme-geometry'] === 'polygon') {
@@ -314,51 +276,106 @@ Promise.all([sourceGrabs(promiseData)])
           
           var mappable = d3.map();
 
-          var x = d3.scaleLinear()
-              .domain([1, 10])
-              .rangeRound([600, 1260]);
+          var valMax = d3.max(sites.features, function(d) { return d.properties.rate; }),
+              valMin = d3.min(sites.features, function(d) { return d.properties.rate; })
+          console.log("Mapping data between " + valMin + " and " + valMax)
+          
+          var color = d3.scaleLinear()
+            .domain([valMin,valMax])
+            .range([colors[colorMonth].low,colors[colorMonth].high])
+          
+          var cellScale = d3.scaleLinear()
+            .domain([1,9])
+            .range([valMin,valMax])
+            
+          var legend = svg.append("g")
+            .attr("class", "legend")
+            .attr("transform", "translate(1700,2000)");
 
-          var color = d3.scaleThreshold()
-              .domain(d3.range(2, 10))
-              .range(colorSchemes.schemeBlues[9]);
-
-          var g = svg.append("g")
-              .attr("class", "key")
-              .attr("transform", "translate(1200,2000)");
-
-          g.selectAll("rect")
-            .data(color.range().map(function(d) {
-                d = color.invertExtent(d);
-                if (d[0] == null) d[0] = x.domain()[0];
-                if (d[1] == null) d[1] = x.domain()[1];
-                return d;
-              }))
-            .enter().append("rect")
-              .attr("height", 40)
-              .attr("x", function(d) { return x(d[0]); })
-              .attr("width", function(d) { return x(d[1]) - x(d[0]); })
-              .attr("fill", function(d) { return color(d[0]); });
-
-          g.call(d3.axisTop(x)
-              .tickSize(10)
-              .tickFormat(function(x, i) { return i ? x : x + "%"; })
-              .tickValues(color.domain()))
-            .select(".domain")
-              .remove();
-
-            svg.append("g")
-                .attr("class", "counties")
-              .selectAll("path")
-              .data(sites.features)
-              .enter().append("path")
-                .attr("fill", function(d) { 
-                  console.log(d.properties.rate);
-                  return color(d.rate); 
-                })
-                .attr("d", path)
+          for (var i = 0; i < legendCells; i++) {
+            var cellValue = cellScale(i+1)
+            legend.append("rect")
+              .attr("class", "legend-cell")
+              .attr("x", 90 * i)
+              .attr("y", 10)
+              .attr("width", 70)
+              .attr("height", 30)
+              .attr("fill", function(d) {
+                return color(cellScale(i+1))
+              })
+            legend.append("text")
+              .attr("x", 90 * i)
+              .attr("y", 60)
+              .attr("class","legend-label")
+              .text(Math.round(cellScale(i+1) * 100) + '%')
+          }
+          
+          svg.append("g")
+              .attr("class", "counties")
+            .selectAll("path")
+            .data(sites.features)
+            .enter().append("path")
+              .attr("fill", function(d) { 
+                if (d.properties.rate) {
+                  return color(d.properties.rate); 
+                } else {
+                  return colors[colorMonth].low;
+                }
+              })
+              .attr("d", path)
         }
         
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        // add and style the default baselayers
+        //////////////////////////////////////////////////////////////////////////////////////////////
+
+        console.error('rendering the map')
+        // add lakes
+        svg.append("path", ".graticule")
+          .datum(topojson.feature(lakes, lakes.objects.us_lakes))
+          .attr("class", "lakes")
+          .attr("d", path)
+          
+        // add land
+        svg.append("path", ".graticule")
+          .datum(topojson.feature(land, land.objects.usa))
+          .attr("class", "land")
+          .attr("d", path)
         
+        // add hillshade (if it's not the middle of kansas)
+        try {
+          svg.append("g")
+            .attr("class", "hillshade")
+          .selectAll("path")
+            .data(hillshade.features)
+          .enter().append("path")
+            .attr("d", path)
+            .attr("class", function(d) {
+              return d.properties.class + "-" + d.properties.level
+            })
+            .style("fill-opacity", 0.1)
+            .style("stroke", "none");
+          } catch(e) {
+            console.error('again, no hillshade');
+            console.error(e)
+          }
+          
+          // add lakes
+          svg.append("path", ".graticule")
+            .datum(topojson.feature(lakes, lakes.objects.us_lakes))
+            .attr("class", "lakes")
+            .attr("d", path)
+          
+          // add states
+          svg.insert("path", ".graticule")
+            .datum(topojson.mesh(states, states.objects.collection,
+              function(a, b) {
+                return a !== b;
+              }))
+            .attr("class", "state-boundary")
+            .attr("d", path)
+              
+          
         //////////////////////////////////////////////////////////////////////////////////////////////
         // add and style POIs
         //////////////////////////////////////////////////////////////////////////////////////////////
@@ -394,17 +411,6 @@ Promise.all([sourceGrabs(promiseData)])
           .enter().append("use")
         		.attr("class", "marker")
         		.attr("xlink:href", "#" + icon)
-            //TODO figure out the ideal tranform here: 
-            /*.attr("transform", function(d) {
-              var coords = projection(d.geometry.coordinates)
-              if (coords) {
-                var adjustedCoords = [
-                  coords[0] - (markerSize),
-                  coords[1] - (markerSize)
-                ]; 
-                return "translate(" + adjustedCoords + ")"; 
-              }          
-            })*/
             .attr("x", function(d) {
               if (projection(d.geometry.coordinates)) {
                 return projection(d.geometry.coordinates)[0];
@@ -482,43 +488,6 @@ Promise.all([sourceGrabs(promiseData)])
           return (parseFloat(d.geometry.coordinates[0]) > -97.0 || d.properties.name === 'Oakland') ? "start" : "end"
         })
         .text(function(d) { return d.properties.name; });
-      // thanks to http://bl.ocks.org/larskotthoff/11406992
-      function arrangeLabels() {
-        var move = 1;
-        while (move > 0) {
-          move = 0;
-          svg.selectAll(".label")
-            .each(function() {
-              var that = this,
-                a = this.getBoundingClientRect();
-              svg.selectAll(".label")
-                .each(function() {
-                  if (this != that) {
-                    var b = this.getBoundingClientRect();
-                    if ((Math.abs(a.left - b.left) * 2 < (a.width + b.width)) &&
-                      (Math.abs(a.top - b.top) * 2 < (a.height + b.height))) {
-                      // overlap, move labels
-                      var dx = (Math.max(0, a.right - b.left) +
-                          Math.min(0, a.left - b.right)) * 0.01,
-                        dy = (Math.max(0, a.bottom - b.top) +
-                          Math.min(0, a.top - b.bottom)) * 0.02,
-                        tt = d3.transform(d3.select(this).attr("transform")),
-                        to = d3.transform(d3.select(that).attr("transform"));
-                      move += Math.abs(dx) + Math.abs(dy);
-
-                      to.translate = [to.translate[0] + dx, to.translate[1] + dy];
-                      tt.translate = [tt.translate[0] - dx, tt.translate[1] - dy];
-                      d3.select(this).attr("transform", "translate(" + tt.translate + ")");
-                      d3.select(that).attr("transform", "translate(" + to.translate + ")");
-                      a = this.getBoundingClientRect();
-                    }
-                  }
-                });
-            });
-        }
-      }
-      console.error('de-colliding labels')
-      arrangeLabels();
 
       //write out the children of the container div
       console.error('writing the SVG basemap composition')      
@@ -527,30 +496,6 @@ Promise.all([sourceGrabs(promiseData)])
       //add the xlink namespace back in here
       function puts(error, stdout, stderr) { console.error(stdout); console.error(stderr) };
 
-      // add markers in a stream
-      /*console.error('streaming markers onto the basemap')
-      csv(cmdOptions['csv-source']).pipe(through2.obj(function (row, _, callback) {
-        let el = `<circle x=${row.x} y=${row.y} />`
-        callback(null, el)
-      })).pipe(fs.createWriteStream('./output.svg', 'utf8'))*/
-      
-      
-      //write the pdf via svg
-      /*var pdfOptions = {
-        "html" : 'projects/' + projTitle + "/map.svg",
-        "paperSize" : {width: width/72 + 'in', height: (width * (2/3))/72+'in', border: '0px'},
-        "deleteOnAction" : true
-      };
-
-      console.error('writing the PDF')
-      pdf.convert(pdfOptions, function(err, result) {
-        if (err) {
-          console.error(err)
-          console.error(result)
-        } else {
-          result.toFile('projects/' + projTitle + "/map.pdf", function() {});
-        }
-      });*/
     }
   })
 })
