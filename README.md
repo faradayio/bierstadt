@@ -21,3 +21,5 @@ Automated thematic print cartography with node.js and d3.js
 * `-p, --topojson-source` (_OPTIONAL_) Path or URL to `.topojson` file of features to be rendered on the output map (e.g. '/home/ubuntu/files/file.topojson') - __must be [styled](templates/base.html) and [added](scripts/map.js)__
 * `-m, --maki-icon` (_OPTIONAL_) - name of desired [maki icon](https://www.mapbox.com/maki-icons/) for rendering points provided in a `csv-source`
 * `-s, --color-scheme` (_OPTIONAL_) - A 3-letter month abbreviation representing the bimodal color scheme you want to use for polygon styling. Default is `jan`.
+* `-d, --data-type` (_OPTIONAL_) - For thematic maps, a numeric formatting type of `fraction`, `percent`, or `raw` - defaults to `fraction`
+

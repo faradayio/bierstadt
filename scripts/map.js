@@ -26,7 +26,8 @@ var optionDefinitions = [
   { name: 'topojson-source', alias: 'p', type: String },
   { name: 'maki-icon', alias: 'm', type: String },
   { name: 'color-scheme', alias: 's', type: String, defaultValue: 'jan'},
-  { name: 'theme-geometry', alias: 'h', type: String }
+  { name: 'theme-geometry', alias: 'h', type: String },
+  { name: 'data-type', alias: 'd', type: String, defaultValue: 'fraction' }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
 
@@ -255,17 +256,17 @@ Promise.all([sourceGrabs(promiseData)])
         // geojson-join --format=csv hockey.csv --againstField=county_id --geojsonField=GEOID < usa_counties.geojson > hockey_counties.geojson
         
         var colors = {
-          "jan": { "low": "#C1E0E0", "high": "#DC8E30" },
+          "jan": { "low": "#fcfbfd", "high": "#3f007d" },
           "feb": { "low": "#e5f5f9", "high": "#2ca25f" },
-          "mar": { "low": "#CDDE90", "high": "#5BA08A" },
-          "apr": { "low": "#7EC3CA", "high": "#9F71AD" },
-          "may": { "low": "#D483B2", "high": "#C1E0E0" },
-          "jun": { "low": "#D45964", "high": "#5A9FAC" },
-          "jul": { "low": "#C21F38", "high": "#25417A" },
-          "aug": { "low": "#A3BC48", "high": "#F1C93A" },
-          "sep": { "low": "#B8AF29", "high": "#602E88" },
-          "oct": { "low": "#6D4609", "high": "#DC8E30" },
-          "nov": { "low": "#E1D1A5", "high": "#5A9FAC" },
+          "mar": { "low": "#e0ecf4", "high": "#8856a7" },
+          "apr": { "low": "#fddbc7", "high": "#2166ac" },
+          "may": { "low": "#fee8c8", "high": "#e34a33" },
+          "jun": { "low": "#ece2f0", "high": "#1c9099" },
+          "jul": { "low": "#e7e1ef", "high": "#dd1c77" },
+          "aug": { "low": "#f7fcb9", "high": "#d53e4f" },
+          "sep": { "low": "#edf8b1", "high": "#2c7fb8" },
+          "oct": { "low": "#feedde", "high": "#a63603" },
+          "nov": { "low": "#ffeda0", "high": "#f03b20" },
           "dec": { "low": "#CAE0F5", "high": "#40725B" },
         }
         // or use these: https://github.com/d3/d3-scale-chromatic
@@ -273,25 +274,27 @@ Promise.all([sourceGrabs(promiseData)])
         console.error('drawing thematic layer')
         if (cmdOptions['theme-geometry'] === 'polygon') {
           console.error('drawing ' + sites.features.length + ' polygons')
-          
-          var mappable = d3.map();
 
-          var valMax = d3.max(sites.features, function(d) { return d.properties.rate; }),
-              valMin = d3.min(sites.features, function(d) { return d.properties.rate; })
+          var valMax = d3.max(sites.features, function(d) { return Number(d.properties.rate); }),
+              valMin = d3.min(sites.features, function(d) { return Number(d.properties.rate); })
           console.log("Mapping data between " + valMin + " and " + valMax)
           
-          var color = d3.scaleLinear()
+          var color = d3.scaleSqrt()
             .domain([valMin,valMax])
             .range([colors[colorMonth].low,colors[colorMonth].high])
           
-          var cellScale = d3.scaleLinear()
+          var cellScale = d3.scaleSqrt()
             .domain([1,9])
             .range([valMin,valMax])
             
           var legend = svg.append("g")
             .attr("class", "legend")
             .attr("transform", "translate(1700,2000)");
-
+            
+          function round(value, decimals) {
+            return Number(Math.round(value+'e'+decimals)+'e-'+decimals);
+          }
+              
           for (var i = 0; i < legendCells; i++) {
             var cellValue = cellScale(i+1)
             legend.append("rect")
@@ -307,7 +310,23 @@ Promise.all([sourceGrabs(promiseData)])
               .attr("x", 90 * i)
               .attr("y", 60)
               .attr("class","legend-label")
-              .text(Math.round(cellScale(i+1) * 100) + '%')
+              .text( function() {
+                if (cmdOptions['data-type'] === 'fraction') {
+                  return Math.round(cellScale(i+1) * 100) + '%'
+                } else if (cmdOptions['data-type'] === 'percent') {
+                  return round(cellScale(i+1),1) + '%'
+                } else if (cmdOptions['data-type'] === 'raw') {
+                  // TODO: make this first condition not bite me in the ass:
+                  return (cellScale(i+1) < 100) ? 0 :
+                        (cellScale(i+1) >= 100 && cellScale(i+1) < 1000) ? cellScale(i+1):
+                        (cellScale(i+1) >= 1000 && cellScale(i+1) < 1000000) ? Math.floor(cellScale(i+1)/1000) + 'k' :
+                        (cellScale(i+1) >= 1000000) ? round(cellScale(i+1)/1000000,1) + 'M':
+                        0
+                } else {
+                  return 0
+                }
+              })
+              //.text(Math.round(cellScale(i+1) * 100) + '%')
           }
           
           svg.append("g")
