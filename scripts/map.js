@@ -23,23 +23,37 @@ var optionDefinitions = [
   { name: 'output-type', alias: 'o', type: String, defaultValue: 'svg'},
   { name: 'csv-source', alias: 'c', type: String },
   { name: 'geojson-source', alias: 'g', type: String },
-  { name: 'maki-icon', alias: 'm', type: String }
+  { name: 'topojson-source', alias: 'p', type: String },
+  { name: 'maki-icon', alias: 'm', type: String },
+  { name: 'color-scheme', alias: 's', type: String, defaultValue: 'jan'},
+  { name: 'theme-geometry', alias: 'h', type: String },
+  { name: 'data-type', alias: 'd', type: String, defaultValue: 'fraction' }
 ]
 var cmdOptions = commandLineArgs(optionDefinitions)
 
 var projTitle = cmdOptions.title
+var colorMonth = cmdOptions['color-scheme']
+
+if (!!cmdOptions['csv-source'] + !!cmdOptions['geojson-source'] + !!cmdOptions['topojson-source'] >= 2) {
+  console.error('HOLD UP - try specifying a single source')
+}
+
+if (cmdOptions['theme-geometry'] && !cmdOptions['csv-source'] && !cmdOptions['geojson-source'] && !cmdOptions['topojson-source']) {
+  console.error('WHOA THERE - you need to specify a source for your ' + cmdOptions['theme-geometry'] + ' layer')
+}
     
 if (!fs.existsSync('./projects/' + projTitle)){
   fs.mkdirSync('./projects/' + projTitle);
 }
 
-var width = 9600,
-  height = 5000,
-  markerSize = 11, // other acceptable option here is 15. long story.
+var width = 3300,
+  height = 2350,
+  markerSize = 15, // other acceptable option here is 15. long story.
+  legendCells = 9,
   scaleCenter;
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-// helper functions
+// helper functions for building geojson from whatever
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 function requestP(url) {
@@ -56,37 +70,72 @@ function requestP(url) {
   });
 }
 
-function getCsv(url) {
-  return new Promise(function(resolve, reject) {
-    var rawData = fs.readFileSync(url, 'utf8');
-    var geoJson = csv2geojson.csv2geojson(rawData, function(err, data) {
-      if (err) {
-        reject(error);
-        return;
-      }
-      else {
-        var outData = { type: 'FeatureCollection', features: [] }
-        for (var f = 0; f < data.features.length; f++) {
-          if (data.features[f].geometry) {
-            outData.features.push(data.features[f])
-          }
-        }
-        resolve(outData);
-      }
-    });
-  })
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////////
 // data preprocessing
 //////////////////////////////////////////////////////////////////////////////////////////////
+// specify urls for any remote data layers, using the requestP() function
+// specify paths for any local data layers, using getCsv() if not already geojson,
+// or getGeojson if already geojson
 
-console.log('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"')
-Promise.all([
-  // specify urls for any data layers, using the requestP() function
-  // specify paths for any local data layers, using getCsv() if not already geojson
-  getCsv(cmdOptions['csv-source'])
-])
+console.error('pulling in the data from the hinterlands - "HERE, DATA DATA DATA!"')
+var sourceGrabs;
+var promiseData;
+if (cmdOptions['geojson-source']) {
+  promiseData = cmdOptions['geojson-source']
+  sourceGrabs = function(url) {
+    return new Promise(function(resolve, reject) {
+      var rawData = JSON.parse(fs.readFileSync(url, 'utf8'));
+      var outData = { type: 'FeatureCollection', features: [] }
+      for (var f = 0; f < rawData.features.length; f++) {
+        if (rawData.features[f].geometry) {
+          outData.features.push(rawData.features[f])
+        }
+      }
+      resolve(outData);
+    });
+  }
+}
+if (cmdOptions['topojson-source']) {
+  promiseData = cmdOptions['topojson-source']
+  sourceGrabs = function(url) {
+    return new Promise(function(resolve, reject) {
+      var rawData = JSON.parse(fs.readFileSync(url, 'utf8'));
+      var geoData = topojson.feature(rawData, rawData.objects.counties)
+      var outData = { type: 'FeatureCollection', features: [] }
+      for (var f = 0; f < geoData.features.length; f++) {
+        if (geoData.features[f].geometry) {
+          outData.features.push(geoData.features[f])
+        }
+      }
+      resolve(outData);
+    });
+  }
+}
+if (cmdOptions['csv-source']) {
+  promiseData = cmdOptions['csv-source']
+  sourceGrabs = function(url) {
+    return new Promise(function(resolve, reject) {
+      var rawData = fs.readFileSync(url, 'utf8');
+      var geoJson = csv2geojson.csv2geojson(rawData, function(err, data) {
+        if (err) {
+          reject(error);
+          return;
+        }
+        else {
+          var outData = { type: 'FeatureCollection', features: [] }
+          for (var f = 0; f < data.features.length; f++) {
+            if (data.features[f].geometry) {
+              outData.features.push(data.features[f])
+            }
+          }
+          resolve(outData);
+        }
+      });
+    })
+  }
+}
+
+Promise.all([sourceGrabs(promiseData)])
 .then(function(results) {
   // define the default baselayers
   var land = JSON.parse(fs.readFileSync('data/usa/usa_land.topojson', 'utf8'));
@@ -95,15 +144,15 @@ Promise.all([
   try {
     var hillshade = JSON.parse(fs.readFileSync('data/usa/usa_osm_hillshade.geojson', 'utf8'));  
   } catch(e) {
-    console.log('no hillshade available here')
-    console.log(e)
+    console.error('no hillshade available here')
+    console.error(e)
   }
   
   // define the user-provided layers
   var sites = results[0];
   
   // pull out just large cities inside the US
-  console.log('getting just the biggest cities')
+  console.error('getting just the biggest cities')
   var places = JSON.parse(fs.readFileSync('data/usa/usa_osm_place_label.geojson', 'utf8'));
   var landGeo = turf.buffer(topojson.feature(land, land.objects.usa).features[0],0,'miles');
   var bigPlaces = {"type":"FeatureCollection","features":[]};
@@ -111,11 +160,12 @@ Promise.all([
   for (var i = 0; i < places.features.length; i++) {
     // a passel of conditions:
     if (
-      places.features[i].properties.scalerank < 7 && 
+      places.features[i].properties.scalerank < 6 && 
       places.features[i].properties.type == 'city' &&
       places.features[i].properties.name !== 'Syracuse' &&
       places.features[i].properties.name !== 'Columbia' &&
       places.features[i].properties.name !== 'Wenatchee' &&
+      places.features[i].properties.name !== 'San Bernardino' &&
       turf.inside(places.features[i], landGeo) && 
       placeNames.indexOf(places.features[i].properties.name) == -1
     ) {
@@ -127,7 +177,7 @@ Promise.all([
   // start the jsdom party, creating an evironment d3 can work in
   //////////////////////////////////////////////////////////////////////////////////////////////
 
-  console.log('configuring the document for writing')
+  console.error('configuring the document for writing')
   jsdom.env({
     file: 'templates/base.html',
     features: {
@@ -148,15 +198,15 @@ Promise.all([
       //////////////////////////////////////////////////////////////////////////////////////////////
 
       var projection;
-      if (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000) {
+      if (!sites || (turf.area(turf.bboxPolygon(turf.bbox(sites))) > 2580000000000)) {
         projection = d3.geoAlbersUsa()
-          .scale(10000)
+          .scale(width * 1.25)
           .translate([width / 2, height / 2]);
           
         var path = d3.geoPath()
           .projection(projection);
           
-        console.log('using Albers USA projection')
+        console.error('using Albers USA projection')
           
       } else {
         function calculateScaleCenter(features) {
@@ -195,62 +245,165 @@ Promise.all([
           .center(scaleCenter.center)
           .translate([width/2, height/2]);
         
-        console.log('using Mercator projection')
+        console.error('using Mercator projection')
       }
+          
       
-      //////////////////////////////////////////////////////////////////////////////////////////////
-      // add and style the default baselayers
-      //////////////////////////////////////////////////////////////////////////////////////////////
-
-      console.log('rendering the map')
-      // add lakes
-      svg.append("path", ".graticule")
-        .datum(topojson.feature(lakes, lakes.objects.us_lakes))
-        .attr("class", "lakes")
-        .attr("d", path)
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        // add and style Polygons
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        // suggestion: use geojson-join to prep data before passing it in, e.g.:
+        // geojson-join --format=csv hockey.csv --againstField=county_id --geojsonField=GEOID < usa_counties.geojson > hockey_counties.geojson
         
-      // add land
-      svg.append("path", ".graticule")
-        .datum(topojson.feature(land, land.objects.usa))
-        .attr("class", "land")
-        .attr("d", path)
+        var colors = {
+          "jan": { "low": "#fcfbfd", "high": "#3f007d" },
+          "feb": { "low": "#e5f5f9", "high": "#2ca25f" },
+          "mar": { "low": "#e0ecf4", "high": "#8856a7" },
+          "apr": { "low": "#fddbc7", "high": "#2166ac" },
+          "may": { "low": "#fee8c8", "high": "#e34a33" },
+          "jun": { "low": "#ece2f0", "high": "#1c9099" },
+          "jul": { "low": "#e7e1ef", "high": "#dd1c77" },
+          "aug": { "low": "#f7fcb9", "high": "#d53e4f" },
+          "sep": { "low": "#edf8b1", "high": "#2c7fb8" },
+          "oct": { "low": "#feedde", "high": "#a63603" },
+          "nov": { "low": "#ffeda0", "high": "#f03b20" },
+          "dec": { "low": "#CAE0F5", "high": "#40725B" },
+        }
+        // or use these: https://github.com/d3/d3-scale-chromatic
+        
+        console.error('drawing thematic layer')
+        if (cmdOptions['theme-geometry'] === 'polygon') {
+          console.error('drawing ' + sites.features.length + ' polygons')
+
+          var valMax = d3.max(sites.features, function(d) { return Number(d.properties.rate); }),
+              valMin = d3.min(sites.features, function(d) { return Number(d.properties.rate); })
+          console.log("Mapping data between " + valMin + " and " + valMax)
           
-      // add states
-      svg.insert("path", ".graticule")
-        .datum(topojson.mesh(states, states.objects.collection,
-          function(a, b) {
-            return a !== b;
-          }))
-        .attr("class", "state-boundary")
-        .attr("d", path)
+          var color = d3.scaleSqrt()
+            .domain([valMin,valMax])
+            .range([colors[colorMonth].low,colors[colorMonth].high])
           
-      // add hillshade (if it's not the middle of kansas)
-      try {
-        svg.append("g")
-          .attr("class", "hillshade")
-        .selectAll("path")
-          .data(hillshade.features)
-        .enter().append("path")
-          .attr("d", path)
-          .attr("class", function(d) {
-            return d.properties.class + "-" + d.properties.level
-          })
-          .style("fill-opacity", 0.1)
-          .style("stroke", "none");
-        } catch(e) {
-          console.log('again, no hillshade');
-          console.log(e)
+          var cellScale = d3.scaleSqrt()
+            .domain([1,9])
+            .range([valMin,valMax])
+            
+          var legend = svg.append("g")
+            .attr("class", "legend")
+            .attr("transform", "translate(1700,2000)");
+            
+          function round(value, decimals) {
+            return Number(Math.round(value+'e'+decimals)+'e-'+decimals);
+          }
+              
+          for (var i = 0; i < legendCells; i++) {
+            var cellValue = cellScale(i+1)
+            legend.append("rect")
+              .attr("class", "legend-cell")
+              .attr("x", 90 * i)
+              .attr("y", 10)
+              .attr("width", 70)
+              .attr("height", 30)
+              .attr("fill", function(d) {
+                return color(cellScale(i+1))
+              })
+            legend.append("text")
+              .attr("x", 90 * i)
+              .attr("y", 60)
+              .attr("class","legend-label")
+              .text( function() {
+                if (cmdOptions['data-type'] === 'fraction') {
+                  return Math.round(cellScale(i+1) * 100) + '%'
+                } else if (cmdOptions['data-type'] === 'percent') {
+                  return round(cellScale(i+1),1) + '%'
+                } else if (cmdOptions['data-type'] === 'raw') {
+                  // TODO: make this first condition not bite me in the ass:
+                  return (cellScale(i+1) < 100) ? 0 :
+                        (cellScale(i+1) >= 100 && cellScale(i+1) < 1000) ? cellScale(i+1):
+                        (cellScale(i+1) >= 1000 && cellScale(i+1) < 1000000) ? Math.floor(cellScale(i+1)/1000) + 'k' :
+                        (cellScale(i+1) >= 1000000) ? round(cellScale(i+1)/1000000,1) + 'M':
+                        0
+                } else {
+                  return 0
+                }
+              })
+              //.text(Math.round(cellScale(i+1) * 100) + '%')
+          }
+          
+          svg.append("g")
+              .attr("class", "counties")
+            .selectAll("path")
+            .data(sites.features)
+            .enter().append("path")
+              .attr("fill", function(d) { 
+                if (d.properties.rate) {
+                  return color(d.properties.rate); 
+                } else {
+                  return colors[colorMonth].low;
+                }
+              })
+              .attr("d", path)
         }
         
+        //////////////////////////////////////////////////////////////////////////////////////////////
+        // add and style the default baselayers
+        //////////////////////////////////////////////////////////////////////////////////////////////
+
+        console.error('rendering the map')
+        // add lakes
+        svg.append("path", ".graticule")
+          .datum(topojson.feature(lakes, lakes.objects.us_lakes))
+          .attr("class", "lakes")
+          .attr("d", path)
+          
+        // add land
+        svg.append("path", ".graticule")
+          .datum(topojson.feature(land, land.objects.usa))
+          .attr("class", "land")
+          .attr("d", path)
+        
+        // add hillshade (if it's not the middle of kansas)
+        try {
+          svg.append("g")
+            .attr("class", "hillshade")
+          .selectAll("path")
+            .data(hillshade.features)
+          .enter().append("path")
+            .attr("d", path)
+            .attr("class", function(d) {
+              return d.properties.class + "-" + d.properties.level
+            })
+            .style("fill-opacity", 0.1)
+            .style("stroke", "none");
+          } catch(e) {
+            console.error('again, no hillshade');
+            console.error(e)
+          }
+          
+          // add lakes
+          svg.append("path", ".graticule")
+            .datum(topojson.feature(lakes, lakes.objects.us_lakes))
+            .attr("class", "lakes")
+            .attr("d", path)
+          
+          // add states
+          svg.insert("path", ".graticule")
+            .datum(topojson.mesh(states, states.objects.collection,
+              function(a, b) {
+                return a !== b;
+              }))
+            .attr("class", "state-boundary")
+            .attr("d", path)
+              
+          
         //////////////////////////////////////////////////////////////////////////////////////////////
         // add and style POIs
         //////////////////////////////////////////////////////////////////////////////////////////////
         
-        console.log('drawing markers')
+        console.error('drawing markers')
         // if a maki icon has been defined, use that:
-        if (cmdOptions['maki-icon']) {
+        if (cmdOptions['theme-geometry'] === 'point' && cmdOptions['maki-icon']) {
           icon = cmdOptions['maki-icon']  
-          console.log('using maki icon: ' + icon)
+          console.error('using maki icon: ' + icon)
           iconSvg = fs.readFileSync(maki.dirname + '/icons/' + icon + '-' + markerSize + '.svg', 'utf8')
           
           var parser = new DOMParser();
@@ -277,16 +430,6 @@ Promise.all([
           .enter().append("use")
         		.attr("class", "marker")
         		.attr("xlink:href", "#" + icon)
-            /*.attr("transform", function(d) {
-              var coords = projection(d.geometry.coordinates)
-              if (coords) {
-                var adjustedCoords = [
-                  coords[0] - (markerSize),
-                  coords[1] - (markerSize)
-                ]; 
-                return "translate(" + adjustedCoords + ")"; 
-              }          
-            })*/
             .attr("x", function(d) {
               if (projection(d.geometry.coordinates)) {
                 return projection(d.geometry.coordinates)[0];
@@ -300,7 +443,7 @@ Promise.all([
         		.attr("width", markerSize)
         		.attr("height", markerSize);
         // otherwise use a simple circle:  
-        } else {
+      } else if (cmdOptions['theme-geometry'] === 'point' && !cmdOptions['maki-icon']) {
           svg.selectAll(".marker")
             .data(sites.features)
             .enter()
@@ -317,9 +460,11 @@ Promise.all([
               } else { return null }
             })
             .attr("r", 3)
+        } else {
+          console.error('no markers to draw - moving on')
         }
         
-      console.log('writing labels')
+      console.error('writing labels')
       // add state labels
       svg.selectAll(".state-label")
         .data(topojson.feature(states, states.objects.collection).features)
@@ -362,78 +507,17 @@ Promise.all([
           return (parseFloat(d.geometry.coordinates[0]) > -97.0 || d.properties.name === 'Oakland') ? "start" : "end"
         })
         .text(function(d) { return d.properties.name; });
-      // thanks to http://bl.ocks.org/larskotthoff/11406992
-      function arrangeLabels() {
-        var move = 1;
-        while (move > 0) {
-          move = 0;
-          svg.selectAll(".label")
-            .each(function() {
-              var that = this,
-                a = this.getBoundingClientRect();
-              svg.selectAll(".label")
-                .each(function() {
-                  if (this != that) {
-                    var b = this.getBoundingClientRect();
-                    if ((Math.abs(a.left - b.left) * 2 < (a.width + b.width)) &&
-                      (Math.abs(a.top - b.top) * 2 < (a.height + b.height))) {
-                      // overlap, move labels
-                      var dx = (Math.max(0, a.right - b.left) +
-                          Math.min(0, a.left - b.right)) * 0.01,
-                        dy = (Math.max(0, a.bottom - b.top) +
-                          Math.min(0, a.top - b.bottom)) * 0.02,
-                        tt = d3.transform(d3.select(this).attr("transform")),
-                        to = d3.transform(d3.select(that).attr("transform"));
-                      move += Math.abs(dx) + Math.abs(dy);
-
-                      to.translate = [to.translate[0] + dx, to.translate[1] + dy];
-                      tt.translate = [tt.translate[0] - dx, tt.translate[1] - dy];
-                      d3.select(this).attr("transform", "translate(" + tt.translate + ")");
-                      d3.select(that).attr("transform", "translate(" + to.translate + ")");
-                      a = this.getBoundingClientRect();
-                    }
-                  }
-                });
-            });
-        }
-      }
-      console.log('de-colliding labels')
-      arrangeLabels();
 
       //write out the children of the container div
-      console.log('writing the SVG basemap composition')      
+      console.error('writing the SVG basemap composition')      
       fs.writeFileSync('projects/' + projTitle + '/map.svg', d3.select(window.document.body).html()) //using sync to keep the code simple
 
       //add the xlink namespace back in here
-      function puts(error, stdout, stderr) { console.log(stdout); console.log(stderr) };
+      function puts(error, stdout, stderr) { console.error(stdout); console.error(stderr) };
 
-      // add markers in a stream
-      /*console.log('streaming markers onto the basemap')
-      csv(cmdOptions['csv-source']).pipe(through2.obj(function (row, _, callback) {
-        let el = `<circle x=${row.x} y=${row.y} />`
-        callback(null, el)
-      })).pipe(fs.createWriteStream('./output.svg', 'utf8'))*/
-      
-      
-      //write the pdf via svg
-      /*var pdfOptions = {
-        "html" : 'projects/' + projTitle + "/map.svg",
-        "paperSize" : {width: width/72 + 'in', height: (width * (2/3))/72+'in', border: '0px'},
-        "deleteOnAction" : true
-      };
-
-      console.log('writing the PDF')
-      pdf.convert(pdfOptions, function(err, result) {
-        if (err) {
-          console.log(err)
-          console.log(result)
-        } else {
-          result.toFile('projects/' + projTitle + "/map.pdf", function() {});
-        }
-      });*/
     }
   })
 })
 .catch(function(err) {
-  console.log(err);
+  console.error(err);
 })

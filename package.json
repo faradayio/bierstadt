@@ -1,6 +1,6 @@
 {
   "name": "bierstadt",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Automated print cartography with node.js and d3.js",
   "main": "index.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "command-line-args": "^3.0.1",
     "csv2geojson": "^5.0.2",
     "d3": "^4.2.7",
+    "d3-svg-legend": "^2.19.0",
     "fast-csv": "^2.3.0",
     "geojson-merge": "^0.1.0",
     "jsdom": "^9.7.1",

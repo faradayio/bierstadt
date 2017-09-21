@@ -1,5 +1,5 @@
 # bierstadt
-Automated print cartography with node.js and d3.js
+Automated thematic print cartography with node.js and d3.js
 
 <img src="img/domes.jpg" alt="The Domes of the Yosemite" id="domes" title="The Domes of the Yosemite"/>
 
@@ -15,6 +15,11 @@ Automated print cartography with node.js and d3.js
 ## Arguments
 * `-t, --title` (_REQUIRED_) Project name; will be used to create working directory and files (e.g. '/bierstadt/proj_title/')
 * `-o, --output-type` One of `svg` or `pdf` - default is `svg` (PDF not actually supported yet - hold tight)
+* `-h, --theme-geometry` (_OPTIONAL_) One of `point` or `polygon`- must be used in tandem with a `*-source` argument:
 * `-c, --csv-source` (_OPTIONAL_) Path or URL to `.csv` file of points to be rendered on the output map (e.g. '/home/ubuntu/files/file.csv') - __must be [styled](templates/base.html) and [added](scripts/map.js)__
 * `-g, --geojson-source` (_OPTIONAL_) Path or URL to `.geojson` file of features to be rendered on the output map (e.g. '/home/ubuntu/files/file.geojson') - __must be [styled](templates/base.html) and [added](scripts/map.js)__
+* `-p, --topojson-source` (_OPTIONAL_) Path or URL to `.topojson` file of features to be rendered on the output map (e.g. '/home/ubuntu/files/file.topojson') - __must be [styled](templates/base.html) and [added](scripts/map.js)__
 * `-m, --maki-icon` (_OPTIONAL_) - name of desired [maki icon](https://www.mapbox.com/maki-icons/) for rendering points provided in a `csv-source`
+* `-s, --color-scheme` (_OPTIONAL_) - A 3-letter month abbreviation representing the bimodal color scheme you want to use for polygon styling. Default is `jan`.
+* `-d, --data-type` (_OPTIONAL_) - For thematic maps, a numeric formatting type of `fraction`, `percent`, or `raw` - defaults to `fraction`
+
